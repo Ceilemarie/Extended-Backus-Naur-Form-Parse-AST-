@@ -6,27 +6,151 @@
     <title>Project-EBNF</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
 
+
+  <!-- Page 1: Intro Page -->
+
     <canvas id="sandCanvas"></canvas>
 
-    <main class="intro-page">
+    <main id="heroSection" class="intro-page">
       <h1 class="title">Extended Backus–Naur Form</h1>
-      <p class="subtitle">with Parse & Ast Tree</p>
+      <p class="subtitle"><em>With Parse &amp; AST Tree</em></p>
 
       <!-- Foreground UI (Text at Buttons) -->
     <div class="ui-layer">
       <div class="top-bar">
         <button id="resetBtn" class="restore-link">Restore Grid</button>
+        <button class="theme-toggle" type="button" aria-label="Switch to light mode">Light mode</button>
       </div>
 
       <div class="center-content">
         <button id="startBtn" class="start-btn">Start</button>
       </div>
     </div>
+
+
+
+    </main>
+
+    <!-- Page 2: Learning Workspace (by clicking the start button) -->
+    <section id="workspaceSection" class="workspace-section hidden">
+      <div class="workspace-container">
+        
+        <!-- Navigation bar -->
+        <header class="workspace-nav">
+          <button id="backToHeroBtn" class="nav-back-btn">&larr; Back</button>
+          <button class="theme-toggle" type="button" aria-label="Switch to light mode">Light mode</button>
+        </header>
+
+        <!-- Theory Section: What is EBNF, Parse, AST -->
+        <div class="theory-grid">
+          <div class="theory-card">
+            <span class="step-tag">01 // SPECIFICATION</span>
+            <h3>What is EBNF?</h3>
+            <p>
+              <strong>Extended Backus–Naur Form</strong> is a formal metasyntax used to define the production rules and allowable syntax of a programming language without ambiguity.
+            </p>
+          </div>
+          <div class="theory-card">
+            <span class="step-tag">02 // SYNTAX ANALYSIS</span>
+            <h3>Concrete Parse Tree</h3>
+            <p>
+              A hierarchical tree that represents the complete, concrete syntactic structure of your source string—including every terminal symbol, delimiter, and parenthesis.
+            </p>
+          </div>
+          <div class="theory-card">
+            <span class="step-tag">03 // SEMANTIC STRUCTURE</span>
+            <h3>Abstract Syntax Tree (AST)</h3>
+            <p>
+              A condensed syntax tree that discards redundant grammar details (like punctuation and grouping symbols) to focus strictly on structural operations and variables.
+            </p>
+          </div>
+        </div>
+
+        <!-- Chatbot-Style Code Input Console -->
+        <div class="chat-console">
+          <div class="console-header">
+            <div class="console-bot-indicator">
+              <span class="bot-dot"></span>
+              <span class="bot-label">SYNTAX ENGINE</span>
+            </div>
+            <div class="preset-group">
+              <span class="preset-label">Presets:</span>
+              <button class="preset-btn" data-code="let total = 10 + 5;">VarDecl</button>
+              <button class="preset-btn" data-code="if (score >= 75) { passed = true; }">IfStmt</button>
+              <button class="preset-btn" data-code="while (count < 10) { count = count + 1; }">WhileLoop</button>
+            </div>
+          </div>
+
+          <div class="bot-message-box">
+            <p class="bot-prompt">
+              &gt; <strong>EBNF:</strong> Enter a single or multi-line statement in the target mini-language.
+            </p>
+          </div>
+
+          <div class="input-row">
+            <input 
+              type="text" 
+              id="codeInput" 
+              placeholder="e.g. let score = 10 + 5;" 
+              autocomplete="off" 
+              spellcheck="false" 
+              value="let total = 10 + 5;"
+            />
+            <button id="runBtn" class="run-btn" aria-label="Tokenize input" title="Tokenize input">&rarr;</button>
+          </div>
+        </div>
+
+        <!-- Roadmap Containers: Parse Tree & AST (For 50% & 75%) -->
+        <div class="tree-grid">
+          <div class="tree-container">
+            <div class="panel-header">
+              <h4>Concrete Parse Tree (CST)</h4>
+            </div>
+            <div class="tree-placeholder">
+              <div class="placeholder-icon">&Delta;</div>
+            </div>
+          </div>
+
+          <div class="tree-container">
+            <div class="panel-header">
+              <h4>Abstract Syntax Tree (AST)</h4>
+            </div>
+            <div class="tree-placeholder">
+              <div class="placeholder-icon">&Lambda;</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 25% Deliverable: Token Stream Breakdown -->
+        <div class="panel-section">
+          <div class="panel-header">
+            <h4>Grammars</h4>
+            <span id="tokenCountBadge" class="panel-badge">0 Tokens</span>
+          </div>
+          <div class="table-container">
+            <table class="token-table">
+              <thead>
+                <tr>
+                  <th>Index</th>
+                  <th>Lexeme</th>
+                  <th>Token Class</th>
+                  <th>Associated EBNF Terminal</th>
+                </tr>
+              </thead>
+              <tbody id="tokenTableBody">
+                <!-- Dynamically populated by script.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
 
     <!-- Script File -->
     <script src="script.js"></script>

@@ -58,7 +58,8 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     draw(context) {
-      context.fillStyle = this.color;
+      const isLightTheme = document.body.classList.contains("theme-light");
+      context.fillStyle = isLightTheme ? "#2563eb" : this.color;
       context.fillRect(Math.round(this.x), Math.round(this.y), 2, 2);
     }
 
@@ -120,8 +121,8 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 
   function animate() {
-    // Pure black background na may persistence trail
-    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+    const isLightTheme = document.body.classList.contains("theme-light");
+    ctx.fillStyle = isLightTheme ? "rgba(245, 245, 245, 0.4)" : "rgba(0, 0, 0, 0.4)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     for (let i = 0; i < particles.length; i++) {
@@ -154,11 +155,181 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Start Lab Action
+});
+
+// --- 2. PAGE TRANSITIONS (START & BACK) ---
   const startBtn = document.getElementById("startBtn");
-  if (startBtn) {
-    startBtn.addEventListener("click", () => {
-      alert("Opening 25% Lexer Workspace...");
+  const heroSection = document.getElementById("heroSection");
+  const workspaceSection = document.getElementById("workspaceSection");
+  const backToHeroBtn = document.getElementById("backToHeroBtn");
+
+  startBtn.addEventListener("click", () => {
+    heroSection.style.display = "none";
+    workspaceSection.classList.remove("hidden");
+    document.body.classList.add("workspace-active");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    runLexer(); // Run initial tokenize
+  });
+
+  backToHeroBtn.addEventListener("click", () => {
+    workspaceSection.classList.add("hidden");
+    heroSection.style.display = "flex";
+    document.body.classList.remove("workspace-active");
+  });
+
+  // Theme toggle: dark mode is the default.
+  const themeToggleBtns = document.querySelectorAll(".theme-toggle");
+  const savedTheme = localStorage.getItem("ebnf-theme");
+
+  if (savedTheme === "light") {
+    document.body.classList.add("theme-light");
+  }
+
+  function updateThemeToggleLabels() {
+    const isLight = document.body.classList.contains("theme-light");
+    themeToggleBtns.forEach((button) => {
+      button.textContent = isLight ? "Dark mode" : "Light mode";
+      button.setAttribute("aria-label", isLight ? "Switch to dark mode" : "Switch to light mode");
     });
   }
-});
+
+  themeToggleBtns.forEach((button) => {
+    button.addEventListener("click", () => {
+      const isLight = document.body.classList.toggle("theme-light");
+      localStorage.setItem("ebnf-theme", isLight ? "light" : "dark");
+      updateThemeToggleLabels();
+    });
+  });
+
+  updateThemeToggleLabels();
+
+  // --- 3. LEXER / TOKENIZER CORE (25% MILESTONE) ---
+  const codeInput = document.getElementById("codeInput");
+  const runBtn = document.getElementById("runBtn");
+  const tokenTableBody = document.getElementById("tokenTableBody");
+  const tokenCountBadge = document.getElementById("tokenCountBadge");
+  const presetBtns = document.querySelectorAll(".preset-btn");
+
+  const KEYWORDS = ["let", "const", "var", "if", "else", "while", "true", "false"];
+  const REL_OPS = ["==", "!=", "<=", ">=", "<", ">"];
+  const ARITH_OPS = ["+", "-", "*", "/", "="];
+  const DELIMITERS = [";", "(", ")", "{", "}", ","];
+
+  function tokenize(code) {
+    const tokens = [];
+    let i = 0;
+
+    while (i < code.length) {
+      const ch = code[i];
+
+      // Skip whitespace
+      if (/\s/.test(ch)) {
+        i++;
+        continue;
+      }
+
+      // Delimiters
+      if (DELIMITERS.includes(ch)) {
+        tokens.push({ lexeme: ch, type: "Delimiter", ebnf: 'Delimiter = "' + ch + '"' });
+        i++;
+        continue;
+      }
+
+      // Multi-char relational operators (==, !=, <=, >=)
+      const twoChar = code.slice(i, i + 2);
+      if (REL_OPS.includes(twoChar)) {
+        tokens.push({ lexeme: twoChar, type: "RelationalOp", ebnf: "RelOp" });
+        i += 2;
+        continue;
+      }
+
+      // Single-char relational or arithmetic operators
+      if (REL_OPS.includes(ch)) {
+        tokens.push({ lexeme: ch, type: "RelationalOp", ebnf: "RelOp" });
+        i++;
+        continue;
+      }
+      if (ARITH_OPS.includes(ch)) {
+        tokens.push({ lexeme: ch, type: "ArithmeticOp", ebnf: ch === "=" ? 'AssignOp = "="' : "ArithOp" });
+        i++;
+        continue;
+      }
+
+      // Numbers / IntLiteral
+      if (/[0-9]/.test(ch)) {
+        let num = "";
+        while (i < code.length && /[0-9]/.test(code[i])) {
+          num += code[i];
+          i++;
+        }
+        tokens.push({ lexeme: num, type: "IntLiteral", ebnf: "IntLiteral = Digit, { Digit }" });
+        continue;
+      }
+
+      // Identifiers & Keywords
+      if (/[a-zA-Z_]/.test(ch)) {
+        let ident = "";
+        while (i < code.length && /[a-zA-Z0-9_]/.test(code[i])) {
+          ident += code[i];
+          i++;
+        }
+        if (KEYWORDS.includes(ident)) {
+          tokens.push({ lexeme: ident, type: "Keyword", ebnf: ident === "let" || ident === "const" || ident === "var" ? "VarKeyword" : "ControlKeyword" });
+        } else {
+          tokens.push({ lexeme: ident, type: "Identifier", ebnf: "Identifier = Letter, { Letter | Digit }" });
+        }
+        continue;
+      }
+
+      // Unrecognized character fallback
+      tokens.push({ lexeme: ch, type: "Unknown", ebnf: "UndefinedTerminal" });
+      i++;
+    }
+
+    return tokens;
+  }
+
+  function getBadgeClass(type) {
+    if (type === "Keyword") return "badge-keyword";
+    if (type === "Identifier") return "badge-identifier";
+    if (type === "IntLiteral") return "badge-literal";
+    if (type.includes("Op")) return "badge-operator";
+    return "badge-delimiter";
+  }
+
+  function renderTokens(tokens) {
+    tokenTableBody.innerHTML = "";
+    tokenCountBadge.textContent = `${tokens.length} Tokens`;
+
+    tokens.forEach((t, idx) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td style="color:#71717a">${idx + 1}</td>
+        <td><strong>${t.lexeme}</strong></td>
+        <td><span class="token-badge ${getBadgeClass(t.type)}">${t.type}</span></td>
+        <td style="color:#2dd4bf">${t.ebnf}</td>
+      `;
+      tokenTableBody.appendChild(row);
+    });
+  }
+
+  function runLexer() {
+    const code = codeInput.value;
+    const tokens = tokenize(code);
+    renderTokens(tokens);
+  }
+
+  runBtn.addEventListener("click", runLexer);
+
+  codeInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") {
+      runLexer();
+    }
+  });
+
+  presetBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      codeInput.value = btn.getAttribute("data-code");
+      runLexer();
+    });
+  });
