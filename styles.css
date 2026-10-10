@@ -556,6 +556,30 @@ p.subtitle{
   color: #71717a;
 }
 
+.tree-output {
+  align-items: flex-start;
+  justify-content: flex-start;
+  overflow: auto;
+  max-height: 360px;
+  text-align: left;
+}
+
+.tree-output pre {
+  margin: 0;
+  width: 100%;
+  color: #a7f3d0;
+  font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+}
+
+.tree-error {
+  border-color: #7f1d1d;
+}
+
+.tree-error p {
+  color: #fca5a5;
+}
+
 /* Light theme overrides. Dark mode remains the default. */
 body.theme-light {
   background-color: #f5f5f5;
@@ -685,3 +709,14 @@ body.theme-light .placeholder-icon {
   color: #a1a1aa;
 }
 
+body.theme-light .tree-output pre {
+  color: #047857;
+}
+
+body.theme-light .tree-error {
+  border-color: #fca5a5;
+}
+
+body.theme-light .tree-error p {
+  color: #b91c1c;
+}
