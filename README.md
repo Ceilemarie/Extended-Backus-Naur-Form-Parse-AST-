@@ -2,7 +2,7 @@
 
 This project is an interactive educational web app that demonstrates the basics of EBNF (Extended Backus–Naur Form), lexical analysis, and the difference between a concrete parse tree and an abstract syntax tree (AST). It is designed as a visual learning tool for beginners exploring formal grammar and parser concepts.
 
-The app presents a dark cyberpunk-style landing page, a sand-particle background animation, and a second workspace panel where users can enter small programs and inspect their tokens, concrete parse tree, and AST.
+The app presents a dark cyberpunk-style landing page, a sand-particle background animation, and a second workspace panel where users can enter Python source or upload a `.py` file and inspect its tokens, concrete parse tree, and AST.
 
 ---
 
@@ -12,7 +12,7 @@ The repository combines:
 
 - a styled landing page and theme toggle
 - a particle-based animated background
-- a mini-language lexer/tokenizer
+- a Python lexer/tokenizer
 - a grammar table showing token classes and matching EBNF terminals
 - an in-browser recursive-descent parser
 - concrete parse tree and AST visualization
@@ -24,9 +24,8 @@ In short, it teaches how source code is broken down into meaningful pieces befor
 
 ## Core concept
 
-The app models a small language similar to JavaScript-like syntax. It includes
-an in-browser recursive-descent parser that generates both a concrete parse tree
-and an abstract syntax tree from the entered source.
+The app accepts Python source exclusively. Its browser parser generates a
+concrete parse tree and an abstract syntax tree from typed or uploaded source.
 
 The flow is:
 
@@ -69,19 +68,20 @@ This effect is implemented in both:
 After clicking Start, the app transitions to a learning workspace with:
 
 - theory cards explaining EBNF, concrete parse trees, and ASTs
-- a console-style input area
-- preset buttons for example programs
+- a multiline Python console input area
+- preset buttons for Python examples
+- a `.py` file upload control
+- automatic AST-to-JSON tree visualization
 - a token table that updates live
 
 ### 4. Tokenizer / lexer
-The app contains a tokenizer that recognizes:
+The app contains a Python-oriented tokenizer that recognizes:
 
-- keywords: let, const, var, if, else, while, true, false
+- Python keywords such as `def`, `if`, `for`, `while`, `return`, `True`, and `None`
 - identifiers
-- integer literals
-- relational operators: ==, !=, <=, >=, <, >
-- arithmetic operators: +, -, *, /, =
-- delimiters: ;, (, ), {, }, ,
+- number and string literals
+- Python operators and delimiters
+- indentation, dedentation, newlines, and comments
 
 Each token is displayed with:
 
@@ -99,36 +99,32 @@ The UI is built to teach grammar concepts rather than just process code. It incl
 
 ---
 
-## Example language modeled by the app
+## Python syntax modeled by the app
 
-The mini-language is designed around simple statements like:
+The browser workspace is designed around common Python statements like:
 
-- variable declarations
+- assignments
 - conditionals
-- while loops
+- loops and function calls
 
 Example inputs include:
 
-- let total = 10 + 5;
-- if (score >= 75) { passed = true; }
-- while (count < 10) { count = count + 1; }
+- `total = 10 + 5`
+- `if score >= 75:`
+- `    passed = True`
+- `for number in range(3):`
+- `    print(number)`
 
 The underlying grammar is conceptually similar to this:
 
 ```
-Program        = Statement, { Statement } ;
-Statement      = VarDecl | Assignment | IfStmt | WhileStmt ;
-VarDecl        = "let", Identifier, "=", Expr, ";" ;
-Assignment     = Identifier, "=", Expr, ";" ;
-IfStmt         = "if", "(", Expr, ")", "{", { Statement }, "}" ;
-WhileStmt      = "while", "(", Expr, ")", "{", { Statement }, "}" ;
-Expr           = Equality ;
-Equality       = Comparison, { ("==" | "!="), Comparison } ;
-Comparison     = Term, { ("<" | "<=" | ">" | ">="), Term } ;
-Term           = Factor, { ("+" | "-"), Factor } ;
-Factor         = Unary | Primary, { ("*" | "/"), Unary } ;
-Unary          = ("+" | "-"), Unary | Primary ;
-Primary        = IntLiteral | BooleanLiteral | Identifier | "(", Expr, ")" ;
+Module         = { Statement } ;
+Statement      = Assignment | FunctionDef | IfStmt | ForStmt | WhileStmt | ReturnStmt | ExprStmt ;
+Assignment     = Identifier, ("=" | "+=" | "-="), Expr, NEWLINE ;
+FunctionDef    = "def", Identifier, "(", [ Parameters ], ")", ":", Suite ;
+IfStmt         = "if", Expr, ":", Suite, { "elif", Expr, ":", Suite }, [ "else", ":", Suite ] ;
+Suite          = NEWLINE, INDENT, { Statement }, DEDENT ;
+Expr           = Python expression ;
 ```
 
 This helps students connect the formal grammar to the tokens they see in the table.
@@ -187,20 +183,20 @@ Contains the functional logic for:
 This is a React version of the sand particle effect. It is essentially a componentized version of the same visual concept, with a canvas-driven image extraction and particle motion system.
 
 ### ebnf_parser_ast.py
-This is a dependency-free Python implementation of the mini-language grammar. It
+This is a dependency-free Python implementation of the documented grammar. It
 provides `tokenize`, recursive-descent parsing, a concrete parse tree, and an
 AST. The file is self-contained and can be uploaded as a single Python file.
 
 Run it with source text:
 
 ```bash
-python3 ebnf_parser_ast.py 'let total = 10 + 5;'
+python3 ebnf_parser_ast.py 'total = 10 + 5'
 ```
 
 Or pipe source through standard input:
 
 ```bash
-printf 'while (count < 10) { count = count + 1; }' | python3 ebnf_parser_ast.py
+printf 'for number in range(3):\n    print(number)\n' | python3 ebnf_parser_ast.py
 ```
 
 The JSON output contains `parse_tree` (including terminals and punctuation)
@@ -214,8 +210,8 @@ The uploadable Python file exposes these functions and types:
 ```python
 from ebnf_parser_ast import ParseError, parse_source, tokenize
 
-tokens = tokenize("let total = 10 + 5;")
-result = parse_source("let total = 10 + 5;")
+tokens = tokenize("total = 10 + 5")
+result = parse_source("total = 10 + 5")
 
 print(result["parse_tree"])  # Concrete syntax tree
 print(result["ast"])         # JSON-serializable AST
@@ -228,50 +224,54 @@ print(result["ast"])         # JSON-serializable AST
   for callers that need the dataclass representation.
 
 The browser implementation exposes the equivalent behavior through the Run
-button and preset buttons. Its internal functions are `tokenize`, `parseSource`,
-`renderTokens`, and `renderTrees`; they are intentionally scoped to the page
-rather than exported as a module.
+button, Python presets, and `.py` upload control. Its internal functions are
+`tokenize`, `parsePythonSource`, `renderTokens`, and `renderTrees`; they are
+intentionally scoped to the page rather than exported as a module.
+
+### AST JSON tree
+
+The workspace accepts Python source exclusively. After valid Python is analyzed,
+the AST is automatically rendered in a separate visual JSON tree container with
+connected Mermaid nodes and branches. The diagram is generated from the AST
+after each successful analysis. Invalid Python shows
+the parse error in the original CST/AST panels and does not generate a JSON
+tree.
 
 ---
 
 ## How the tokenizer works
 
-The tokenizer in script.js scans the input left to right and classifies characters into structured token types.
+The tokenizer in script.js scans Python input left to right and classifies
+characters into structured token types.
 
 Examples:
 
-- whitespace is ignored
-- delimiters like ; and { are tokenized individually
-- comparison operators like == and >= are recognized before single-character symbols
-- numeric sequences become IntLiteral tokens
-- alphabetic sequences become either keywords or identifiers
-- unrecognized characters are marked as Unknown
+- indentation produces `INDENT` and `DEDENT` tokens
+- Python delimiters and operators are tokenized individually
+- numeric sequences become `NumberLiteral` tokens
+- quoted text becomes `StringLiteral` tokens
+- alphabetic sequences become either Python keywords or identifiers
+- comments and line endings are preserved as tokens
+- unrecognized characters are marked as `Unknown`
 
 Each token includes a human-readable EBNF label, and valid input is parsed into
 the concrete parse tree and AST panels.
 
-The browser parser accepts declarations (`let`, `const`, and `var`), assignments,
-`if`/`else`, `while`, integer and boolean literals, identifiers, parentheses,
-arithmetic operators (`+`, `-`, `*`, `/`), comparison operators (`<`, `<=`, `>`,
-`>=`, `==`, `!=`), unary signs, and `//`-free whitespace-separated source.
-Unknown characters and unsupported syntax are reported as parse errors. The
-Python parser additionally supports `//` comments.
+The browser parser accepts common Python assignments, function definitions,
+conditionals, loops, returns, calls, literals, operators, indentation, and
+comments. Unknown characters are reported as parse errors. It is a structural
+learning parser, not a replacement for Python's complete `ast` module.
 
 ---
 
 ## Current limitation
 
 This repo is intentionally a learning/demo project rather than a production
-parser. The browser parser validates the documented mini-language and reports
-syntax errors, but it does not implement a complete JavaScript grammar,
-advanced error recovery, or execution.
-
-It does not currently support strings, decimal numbers, arrays, objects,
-functions or function calls, `for`/`switch`/`return`, logical operators
-(`&&`, `||`, `!`), increment/decrement, compound assignments, or JavaScript
-execution. There is no artificial token or statement limit; practical limits
-are browser memory, processing time, and recursion depth for deeply nested
-input. The rendered tree panels are scrollable and capped visually at 360px.
+parser. The browser parser validates common Python structure and reports
+unsupported characters, but it does not implement every Python grammar rule,
+advanced error recovery, or execution. There is no artificial token or
+statement limit; practical limits are browser memory and processing time. The
+rendered tree panels are scrollable and capped visually at 360px.
 
 The practical milestones represented here are:
 

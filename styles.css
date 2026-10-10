@@ -411,6 +411,8 @@ p.subtitle{
   font-size: 14px;
   color: #ffffff;
   outline: none;
+  resize: vertical;
+  line-height: 1.5;
 }
 
 #codeInput:focus {
@@ -434,6 +436,26 @@ p.subtitle{
 
 .run-btn:hover {
   background: #14b8a6;
+}
+
+#pythonFile {
+  display: none;
+}
+
+.upload-btn {
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  border: 1px solid #3f3f46;
+  border-radius: 18px;
+  color: #a1a1aa;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.upload-btn:hover {
+  color: #ffffff;
+  border-color: #2dd4bf;
 }
 
 /* Panel Sections & Tables */
@@ -501,6 +523,7 @@ p.subtitle{
 .badge-literal { background: rgba(250, 204, 21, 0.15); color: #facc15; }
 .badge-operator { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
 .badge-delimiter { background: rgba(161, 161, 170, 0.15); color: #a1a1aa; }
+.badge-comment { background: rgba(161, 161, 170, 0.15); color: #a1a1aa; }
 
 /* Tree Roadmap Grid */
 .tree-grid {
@@ -570,6 +593,167 @@ p.subtitle{
   color: #a7f3d0;
   font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
   white-space: pre-wrap;
+}
+
+.json-tree,
+.json-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 24px;
+  width: 100%;
+}
+
+.json-tree > .json-node {
+  padding-left: 0;
+}
+
+.json-node {
+  position: relative;
+  padding: 5px 0;
+}
+
+.json-node:not(:only-child)::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -13px;
+  border-left: 1px solid #3f3f46;
+  content: "";
+}
+
+.json-node:not(:last-child)::after {
+  position: absolute;
+  top: 21px;
+  left: -13px;
+  width: 13px;
+  border-top: 1px solid #3f3f46;
+  content: "";
+}
+
+.json-tree details {
+  color: #a7f3d0;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.json-tree summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid #134e4a;
+  border-radius: 6px;
+  background: rgba(20, 184, 166, 0.08);
+  cursor: pointer;
+  list-style: none;
+}
+
+.json-tree summary::-webkit-details-marker {
+  display: none;
+}
+
+.json-tree summary::before {
+  color: #2dd4bf;
+  content: "▸";
+}
+
+.json-tree details[open] > summary::before {
+  content: "▾";
+}
+
+.json-leaf {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid #27272a;
+  border-radius: 6px;
+  background: #18181b;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.json-key { color: #f4f4f5; }
+.json-value { color: #facc15; }
+.json-kind,
+.json-type { color: #71717a; font-size: 10px; }
+.json-string { color: #facc15; }
+.json-number { color: #38bdf8; }
+.json-boolean { color: #c084fc; }
+.json-null { color: #a1a1aa; }
+
+.json-summary {
+  color: #a7f3d0;
+  font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.json-summary p {
+  color: #71717a;
+  margin-top: 8px;
+}
+
+.json-tree-container .mermaid {
+  width: 100%;
+  overflow: auto;
+  text-align: center;
+}
+
+.json-tree-container .mermaid svg {
+  max-width: none;
+  min-width: 520px;
+  height: auto;
+  cursor: grab;
+  transition: transform 0.15s ease;
+}
+
+.json-tree-container .mermaid svg:active,
+.json-tree-container.is-panning .mermaid svg {
+  cursor: grabbing;
+}
+
+.json-tree-container .node {
+  cursor: pointer;
+  outline: none;
+}
+
+.json-tree-container .node:focus .node rect,
+.json-tree-container .node:hover rect,
+.json-tree-container .node.selected rect {
+  stroke: #facc15;
+  stroke-width: 3px;
+}
+
+.mermaid-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mermaid-controls button {
+  min-width: 28px;
+  padding: 4px 8px;
+  border: 1px solid #3f3f46;
+  border-radius: 5px;
+  background: #18181b;
+  color: #a1a1aa;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mermaid-controls button:hover {
+  border-color: #2dd4bf;
+  color: #2dd4bf;
+}
+
+.mermaid-selection {
+  min-height: 18px;
+  margin-top: 10px;
+  color: #71717a;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+#jsonTreeOutput.is-panning {
+  cursor: grabbing;
 }
 
 .tree-error {
@@ -669,6 +853,17 @@ body.theme-light .preset-btn:hover {
   color: #18181b;
 }
 
+body.theme-light .mode-btn {
+  border-color: #d4d4d8;
+  color: #71717a;
+}
+
+body.theme-light .mode-btn.active,
+body.theme-light .mode-btn:hover {
+  border-color: #0f766e;
+  color: #0f766e;
+}
+
 body.theme-light .bot-prompt {
   color: #27272a;
 }
@@ -683,6 +878,16 @@ body.theme-light .input-row::after {
 }
 
 body.theme-light #codeInput {
+  color: #18181b;
+}
+
+body.theme-light .upload-btn {
+  border-color: #d4d4d8;
+  color: #52525b;
+}
+
+body.theme-light .upload-btn:hover {
+  border-color: #0f766e;
   color: #18181b;
 }
 
@@ -711,6 +916,30 @@ body.theme-light .placeholder-icon {
 
 body.theme-light .tree-output pre {
   color: #047857;
+}
+
+body.theme-light .json-leaf {
+  background: #ffffff;
+  border-color: #e4e4e7;
+}
+
+body.theme-light .json-tree summary {
+  background: #f0fdfa;
+  border-color: #99f6e4;
+}
+
+body.theme-light .json-key {
+  color: #18181b;
+}
+
+body.theme-light .mermaid-controls button {
+  background: #ffffff;
+  border-color: #d4d4d8;
+  color: #52525b;
+}
+
+body.theme-light .mermaid-selection {
+  color: #71717a;
 }
 
 body.theme-light .tree-error {

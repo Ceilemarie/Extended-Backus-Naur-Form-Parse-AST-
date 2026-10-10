@@ -203,99 +203,108 @@ window.addEventListener("DOMContentLoaded", () => {
 
   updateThemeToggleLabels();
 
-  // --- 3. LEXER / TOKENIZER CORE (25% MILESTONE) ---
+  // --- 3. PYTHON LEXER / TOKENIZER CORE ---
   const codeInput = document.getElementById("codeInput");
   const runBtn = document.getElementById("runBtn");
   const tokenTableBody = document.getElementById("tokenTableBody");
   const tokenCountBadge = document.getElementById("tokenCountBadge");
   const presetBtns = document.querySelectorAll(".preset-btn");
+  const sourceFile = document.getElementById("sourceFile");
+  const parseTreeTitle = document.getElementById("parseTreeTitle");
+  const astTitle = document.getElementById("astTitle");
   const parseTreeOutput = document.getElementById("parseTreeOutput");
   const astOutput = document.getElementById("astOutput");
+  const jsonTreeOutput = document.getElementById("jsonTreeOutput");
+  const mermaidSelection = document.getElementById("mermaidSelection");
+  const mermaidZoomIn = document.getElementById("mermaidZoomIn");
+  const mermaidZoomOut = document.getElementById("mermaidZoomOut");
+  const mermaidZoomReset = document.getElementById("mermaidZoomReset");
+  let mermaidScale = 1;
+  let mermaidOffset = { x: 0, y: 0 };
 
-  const KEYWORDS = ["let", "const", "var", "if", "else", "while", "true", "false"];
-  const REL_OPS = ["==", "!=", "<=", ">=", "<", ">"];
-  const ARITH_OPS = ["+", "-", "*", "/", "="];
-  const DELIMITERS = [";", "(", ")", "{", "}", ","];
+  const KEYWORDS = new Set([
+    "and", "as", "assert", "async", "await", "break", "class", "continue",
+    "def", "del", "elif", "else", "except", "False", "finally", "for", "from",
+    "global", "if", "import", "in", "is", "lambda", "None", "nonlocal", "not",
+    "or", "pass", "raise", "return", "True", "try", "while", "with", "yield",
+  ]);
+  const OPERATORS = ["**", "//", "->", ":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=", "=>", "+", "-", "*", "/", "%", "=", "<", ">", "|", "&", "^", "~"];
+  const DELIMITERS = new Set(["(", ")", "[", "]", "{", "}", ",", ":", ".", ";"]);
 
   function tokenize(code) {
     const tokens = [];
-    let i = 0;
-
-    while (i < code.length) {
-      const ch = code[i];
-
-      // Skip whitespace
-      if (/\s/.test(ch)) {
-        i++;
-        continue;
-      }
-
-      // Delimiters
-      if (DELIMITERS.includes(ch)) {
-        tokens.push({ lexeme: ch, type: "Delimiter", ebnf: 'Delimiter = "' + ch + '"' });
-        i++;
-        continue;
-      }
-
-      // Multi-char relational operators (==, !=, <=, >=)
-      const twoChar = code.slice(i, i + 2);
-      if (REL_OPS.includes(twoChar)) {
-        tokens.push({ lexeme: twoChar, type: "RelationalOp", ebnf: "RelOp" });
-        i += 2;
-        continue;
-      }
-
-      // Single-char relational or arithmetic operators
-      if (REL_OPS.includes(ch)) {
-        tokens.push({ lexeme: ch, type: "RelationalOp", ebnf: "RelOp" });
-        i++;
-        continue;
-      }
-      if (ARITH_OPS.includes(ch)) {
-        tokens.push({ lexeme: ch, type: "ArithmeticOp", ebnf: ch === "=" ? 'AssignOp = "="' : "ArithOp" });
-        i++;
-        continue;
-      }
-
-      // Numbers / IntLiteral
-      if (/[0-9]/.test(ch)) {
-        let num = "";
-        while (i < code.length && /[0-9]/.test(code[i])) {
-          num += code[i];
-          i++;
+    const lines = code.replace(/\r\n?/g, "\n").split("\n");
+    const indentStack = [0];
+    lines.forEach((line, lineIndex) => {
+      const leading = line.match(/^[ \t]*/)[0].replace(/\t/g, "    ").length;
+      const content = line.slice(line.match(/^[ \t]*/)[0].length);
+      if (!content.trim() || content.trim().startsWith("#")) return;
+      if (leading > indentStack[indentStack.length - 1]) {
+        indentStack.push(leading);
+        tokens.push({ lexeme: "    ", type: "Indent", ebnf: "INDENT" });
+      } else {
+        while (leading < indentStack[indentStack.length - 1]) {
+          indentStack.pop();
+          tokens.push({ lexeme: "", type: "Dedent", ebnf: "DEDENT" });
         }
-        tokens.push({ lexeme: num, type: "IntLiteral", ebnf: "IntLiteral = Digit, { Digit }" });
-        continue;
       }
-
-      // Identifiers & Keywords
-      if (/[a-zA-Z_]/.test(ch)) {
-        let ident = "";
-        while (i < code.length && /[a-zA-Z0-9_]/.test(code[i])) {
-          ident += code[i];
-          i++;
+      let i = 0;
+      while (i < content.length) {
+        const ch = content[i];
+        if (/\s/.test(ch)) { i++; continue; }
+        if (ch === "#") {
+          tokens.push({ lexeme: content.slice(i), type: "Comment", ebnf: "COMMENT" });
+          break;
         }
-        if (KEYWORDS.includes(ident)) {
-          tokens.push({ lexeme: ident, type: "Keyword", ebnf: ident === "let" || ident === "const" || ident === "var" ? "VarKeyword" : "ControlKeyword" });
-        } else {
-          tokens.push({ lexeme: ident, type: "Identifier", ebnf: "Identifier = Letter, { Letter | Digit }" });
+        if (ch === "'" || ch === '"') {
+          const quote = ch;
+          let value = ch; i++;
+          while (i < content.length) {
+            value += content[i];
+            if (content[i] === quote && content[i - 1] !== "\\") { i++; break; }
+            i++;
+          }
+          tokens.push({ lexeme: value, type: "StringLiteral", ebnf: "STRING" });
+          continue;
         }
-        continue;
+        const number = content.slice(i).match(/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/);
+        if (number) {
+          tokens.push({ lexeme: number[0], type: "NumberLiteral", ebnf: "NUMBER" });
+          i += number[0].length; continue;
+        }
+        const identifier = content.slice(i).match(/^[A-Za-z_][A-Za-z0-9_]*/);
+        if (identifier) {
+          const value = identifier[0];
+          tokens.push({ lexeme: value, type: KEYWORDS.has(value) ? "Keyword" : "Identifier", ebnf: KEYWORDS.has(value) ? "KEYWORD" : "NAME" });
+          i += value.length; continue;
+        }
+        const operator = OPERATORS.find((candidate) => content.startsWith(candidate, i));
+        if (operator) {
+          tokens.push({ lexeme: operator, type: "Operator", ebnf: "OPERATOR" });
+          i += operator.length; continue;
+        }
+        if (DELIMITERS.has(ch)) {
+          tokens.push({ lexeme: ch, type: "Delimiter", ebnf: "DELIMITER" });
+          i++; continue;
+        }
+        tokens.push({ lexeme: ch, type: "Unknown", ebnf: "INVALID" });
+        i++;
       }
-
-      // Unrecognized character fallback
-      tokens.push({ lexeme: ch, type: "Unknown", ebnf: "UndefinedTerminal" });
-      i++;
+      tokens.push({ lexeme: "\\n", type: "Newline", ebnf: "NEWLINE" });
+    });
+    while (indentStack.length > 1) {
+      indentStack.pop();
+      tokens.push({ lexeme: "", type: "Dedent", ebnf: "DEDENT" });
     }
-
     return tokens;
   }
 
   function getBadgeClass(type) {
     if (type === "Keyword") return "badge-keyword";
     if (type === "Identifier") return "badge-identifier";
-    if (type === "IntLiteral") return "badge-literal";
-    if (type.includes("Op")) return "badge-operator";
+    if (type === "NumberLiteral" || type === "StringLiteral") return "badge-literal";
+    if (type === "Operator") return "badge-operator";
+    if (type === "Comment") return "badge-comment";
     return "badge-delimiter";
   }
 
@@ -307,9 +316,9 @@ window.addEventListener("DOMContentLoaded", () => {
       const row = document.createElement("tr");
       row.innerHTML = `
         <td style="color:#71717a">${idx + 1}</td>
-        <td><strong>${t.lexeme}</strong></td>
-        <td><span class="token-badge ${getBadgeClass(t.type)}">${t.type}</span></td>
-        <td style="color:#2dd4bf">${t.ebnf}</td>
+        <td><strong>${escapeHtml(t.lexeme)}</strong></td>
+        <td><span class="token-badge ${getBadgeClass(t.type)}">${escapeHtml(t.type)}</span></td>
+        <td style="color:#2dd4bf">${escapeHtml(t.ebnf)}</td>
       `;
       tokenTableBody.appendChild(row);
     });
@@ -317,9 +326,158 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function runLexer() {
     const code = codeInput.value;
+    parseTreeTitle.textContent = "Concrete Parse Tree (CST)";
+    astTitle.textContent = "Abstract Syntax Tree (AST)";
     const tokens = tokenize(code);
     renderTokens(tokens);
     renderTrees(code, tokens);
+  }
+
+  function jsonTree(value, key = "root", depth = 0) {
+    const node = document.createElement("li");
+    node.className = "json-node";
+    const isBranch = value !== null && typeof value === "object";
+    const label = document.createElement(isBranch ? "details" : "span");
+    if (isBranch) {
+      label.open = depth < 2;
+      const summary = document.createElement("summary");
+      summary.className = "json-branch-label";
+      summary.innerHTML = `<span class="json-key">${escapeHtml(key)}</span><span class="json-kind">${Array.isArray(value) ? "array" : "object"}</span>`;
+      label.appendChild(summary);
+      const children = document.createElement("ul");
+      Object.entries(value).forEach(([childKey, childValue]) => {
+        children.appendChild(jsonTree(childValue, childKey, depth + 1));
+      });
+      label.appendChild(children);
+    } else {
+      const type = value === null ? "null" : typeof value;
+      label.innerHTML = `<span class="json-key">${escapeHtml(key)}</span><span class="json-value">${escapeHtml(String(value))}</span><span class="json-type">${type}</span>`;
+      label.className = `json-leaf json-${type}`;
+    }
+    node.appendChild(label);
+    return node;
+  }
+
+  function renderJsonTree(code) {
+    jsonTreeOutput.classList.remove("tree-output", "tree-error");
+    jsonTreeOutput.innerHTML = "";
+    if (!code) {
+      jsonTreeOutput.innerHTML = "<p>Run Python to generate the AST JSON tree.</p>";
+      return;
+    }
+    if (!window.mermaid) {
+      jsonTreeOutput.classList.add("tree-error");
+      jsonTreeOutput.innerHTML = "<p>Mermaid could not be loaded. Check your connection and reload the page.</p>";
+      return;
+    }
+    const diagram = buildMermaidTree(code);
+    jsonTreeOutput.classList.add("tree-output");
+    window.mermaid.render(`pythonAstTree${Date.now()}`, diagram)
+      .then(({ svg }) => {
+        jsonTreeOutput.innerHTML = svg;
+        mermaidScale = 1;
+        mermaidOffset = { x: 0, y: 0 };
+        setupMermaidInteractions();
+      })
+      .catch((error) => {
+        jsonTreeOutput.classList.add("tree-error");
+        jsonTreeOutput.innerHTML = `<p>Unable to render Mermaid tree: ${escapeHtml(error.message)}</p>`;
+      });
+  }
+
+  function setupMermaidInteractions() {
+    const svg = jsonTreeOutput.querySelector("svg");
+    if (!svg) return;
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Interactive Python AST diagram");
+    svg.style.transformOrigin = "top left";
+    applyMermaidTransform();
+    jsonTreeOutput.querySelectorAll(".node").forEach((node) => {
+      node.setAttribute("tabindex", "0");
+      node.addEventListener("click", () => selectMermaidNode(node));
+      node.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          selectMermaidNode(node);
+        }
+      });
+    });
+  }
+
+  function selectMermaidNode(node) {
+    jsonTreeOutput.querySelectorAll(".node.selected").forEach((selected) => selected.classList.remove("selected"));
+    node.classList.add("selected");
+    mermaidSelection.textContent = `Selected: ${node.querySelector("text")?.textContent || "AST node"}`;
+  }
+
+  function applyMermaidTransform() {
+    const svg = jsonTreeOutput.querySelector("svg");
+    if (svg) svg.style.transform = `translate(${mermaidOffset.x}px, ${mermaidOffset.y}px) scale(${mermaidScale})`;
+  }
+
+  mermaidZoomIn.addEventListener("click", () => {
+    mermaidScale = Math.min(3, mermaidScale + 0.15);
+    applyMermaidTransform();
+  });
+
+  mermaidZoomOut.addEventListener("click", () => {
+    mermaidScale = Math.max(0.35, mermaidScale - 0.15);
+    applyMermaidTransform();
+  });
+
+  mermaidZoomReset.addEventListener("click", () => {
+    mermaidScale = 1;
+    mermaidOffset = { x: 0, y: 0 };
+    applyMermaidTransform();
+  });
+
+  let mermaidDrag;
+  jsonTreeOutput.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".node")) return;
+    mermaidDrag = { x: event.clientX, y: event.clientY, offsetX: mermaidOffset.x, offsetY: mermaidOffset.y };
+    jsonTreeOutput.setPointerCapture(event.pointerId);
+    jsonTreeOutput.classList.add("is-panning");
+  });
+
+  jsonTreeOutput.addEventListener("pointermove", (event) => {
+    if (!mermaidDrag) return;
+    mermaidOffset.x = mermaidDrag.offsetX + event.clientX - mermaidDrag.x;
+    mermaidOffset.y = mermaidDrag.offsetY + event.clientY - mermaidDrag.y;
+    applyMermaidTransform();
+  });
+
+  jsonTreeOutput.addEventListener("pointerup", () => {
+    mermaidDrag = null;
+    jsonTreeOutput.classList.remove("is-panning");
+  });
+
+  function buildMermaidTree(value) {
+    const lines = ["flowchart TD"];
+    let nodeIndex = 0;
+    const addNode = (nodeValue, key = "root", parentId = null) => {
+      const id = `node${nodeIndex++}`;
+      const label = `${key}: ${formatTreeValue(nodeValue)}`;
+      lines.push(`${id}["${mermaidLabel(label)}"]`);
+      if (parentId) lines.push(`${parentId} --> ${id}`);
+      if (nodeValue && typeof nodeValue === "object") {
+        Object.entries(nodeValue).forEach(([childKey, childValue]) => addNode(childValue, childKey, id));
+      }
+    };
+    addNode(value);
+    return lines.join("\n");
+  }
+
+  function formatTreeValue(value) {
+    if (value === null) return "null";
+    if (typeof value === "object") return Array.isArray(value) ? "[ ]" : "{ }";
+    return String(value);
+  }
+
+  function mermaidLabel(value) {
+    return value
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, "#quot;")
+      .replace(/\n/g, " ");
   }
 
   function parseSource(code, tokens) {
@@ -446,26 +604,77 @@ window.addEventListener("DOMContentLoaded", () => {
     return { parseTree: cst, ast: { type: "Program", statements: cst.children.map(astStatement) } };
   }
 
+  function parsePythonSource(code, tokens) {
+    const lines = code.replace(/\r\n?/g, "\n").split("\n");
+    const meaningful = lines
+      .map((text, index) => ({ text, index: index + 1, indent: text.match(/^[ \t]*/)[0].replace(/\t/g, "    ").length }))
+      .filter((line) => line.text.trim() && !line.text.trim().startsWith("#"));
+    const expressionAst = (source) => {
+      const value = source.trim();
+      if (/^(True|False|None)$/.test(value)) return { type: "Constant", value: value === "True" ? true : value === "False" ? false : null };
+      if (/^(['"]).*\1$/.test(value)) return { type: "Constant", value: value.slice(1, -1) };
+      if (/^-?\d+(?:\.\d+)?$/.test(value)) return { type: "Constant", value: Number(value) };
+      const call = value.match(/^([A-Za-z_]\w*)\((.*)\)$/);
+      if (call) return { type: "Call", function: { type: "Name", id: call[1] }, arguments: call[2] ? call[2].split(",").map(expressionAst) : [] };
+      const binary = value.match(/^(.+?)\s(==|!=|<=|>=|<|>|\+|-|\*|\/|%|and|or)\s(.+)$/);
+      if (binary) return { type: "BinOp", operator: binary[2], left: expressionAst(binary[1]), right: expressionAst(binary[3]) };
+      return { type: "Name", id: value };
+    };
+    const astForLine = (source) => {
+      const text = source.trim();
+      let match = text.match(/^def\s+([A-Za-z_]\w*)\s*\((.*?)\)\s*:/);
+      if (match) return { type: "FunctionDef", name: match[1], arguments: match[2] ? match[2].split(",").map((name) => name.trim()).filter(Boolean) : [] };
+      match = text.match(/^(if|elif|while)\s+(.+):$/);
+      if (match) return { type: match[1] === "if" ? "If" : match[1] === "elif" ? "Elif" : "While", test: expressionAst(match[2]), body: [] };
+      match = text.match(/^for\s+([A-Za-z_]\w*)\s+in\s+(.+):$/);
+      if (match) return { type: "For", target: { type: "Name", id: match[1] }, iterable: expressionAst(match[2]), body: [] };
+      match = text.match(/^return(?:\s+(.+))?$/);
+      if (match) return { type: "Return", value: match[1] ? expressionAst(match[1]) : null };
+      match = text.match(/^([A-Za-z_]\w*)\s*([+\-*\/%]?=)\s*(.+)$/);
+      if (match) return { type: "Assign", target: { type: "Name", id: match[1] }, operator: match[2], value: expressionAst(match[3]) };
+      return { type: "Expr", value: expressionAst(text) };
+    };
+    const cst = {
+      rule: "PythonModule",
+      children: meaningful.map((line) => ({
+        rule: "PythonStatement",
+        line: line.index,
+        indent: line.indent,
+        children: tokenize(line.text).filter((token) => !["Indent", "Dedent", "Newline"].includes(token.type)).map((token) => ({ terminal: token.lexeme, kind: token.type })),
+      })),
+    };
+    const ast = { type: "Module", body: meaningful.map((line) => astForLine(line.text)) };
+    const invalid = tokens.find((token) => token.type === "Unknown");
+    if (invalid) throw new Error(`Unsupported Python character "${invalid.lexeme}"`);
+    return { parseTree: cst, ast };
+  }
+
   function renderTrees(code, tokens) {
     parseTreeOutput.classList.remove("tree-output", "tree-error");
     astOutput.classList.remove("tree-output", "tree-error");
     if (!code.trim()) {
       parseTreeOutput.innerHTML = "<p>Enter code to generate the concrete parse tree.</p>";
       astOutput.innerHTML = "<p>Enter code to generate the abstract syntax tree.</p>";
+      jsonTreeOutput.classList.remove("tree-output", "tree-error");
+      jsonTreeOutput.innerHTML = "<p>Run Python to generate the AST JSON tree.</p>";
       return;
     }
     try {
-      const result = parseSource(code, tokens);
+      const result = parsePythonSource(code, tokens);
       parseTreeOutput.classList.add("tree-output");
       astOutput.classList.add("tree-output");
       parseTreeOutput.innerHTML = `<pre>${escapeHtml(JSON.stringify(result.parseTree, null, 2))}</pre>`;
       astOutput.innerHTML = `<pre>${escapeHtml(JSON.stringify(result.ast, null, 2))}</pre>`;
+      renderJsonTree(result.ast);
     } catch (error) {
       const message = `<p>Parse error: ${escapeHtml(error.message)}</p>`;
       parseTreeOutput.classList.add("tree-error");
       astOutput.classList.add("tree-error");
       parseTreeOutput.innerHTML = message;
       astOutput.innerHTML = message;
+      jsonTreeOutput.classList.remove("tree-output");
+      jsonTreeOutput.classList.add("tree-error");
+      jsonTreeOutput.innerHTML = "<p>AST JSON tree unavailable until the Python input parses successfully.</p>";
     }
   }
 
@@ -475,10 +684,42 @@ window.addEventListener("DOMContentLoaded", () => {
 
   runBtn.addEventListener("click", runLexer);
 
-  codeInput.addEventListener("keypress", (e) => {
+  codeInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
-      runLexer();
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        runLexer();
+      }
     }
+  });
+
+  let analysisTimer;
+  codeInput.addEventListener("input", () => {
+    clearTimeout(analysisTimer);
+    analysisTimer = setTimeout(runLexer, 300);
+  });
+
+  sourceFile.addEventListener("change", () => {
+    const file = sourceFile.files[0];
+    if (!file) return;
+    const isPythonFile = file.name.toLowerCase().endsWith(".py");
+    if (!isPythonFile) {
+      sourceFile.value = "";
+      renderTrees("", []);
+      parseTreeOutput.innerHTML = "<p>Only Python .py files are supported.</p>";
+      astOutput.innerHTML = "<p>Choose a .py file and try again.</p>";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      codeInput.value = String(reader.result);
+      runLexer();
+    };
+    reader.onerror = () => {
+      parseTreeOutput.innerHTML = "<p>Unable to read the selected file.</p>";
+      astOutput.innerHTML = "<p>Unable to read the selected file.</p>";
+    };
+    reader.readAsText(file);
   });
 
   presetBtns.forEach((btn) => {

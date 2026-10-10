@@ -1,10 +1,31 @@
-"""A small EBNF-inspired parser and AST demo.
+"""A Python parser and AST demo.
 
-The module implements the language described in README.md:
+The module implements a subset of Python syntax:
 
-    Program   = { Statement } ;
-    Statement = VarDecl | IfStmt | WhileStmt | Assignment ;
-    Expr      = equality ;
+    Program        = { Statement } ;
+    Statement      = SimpleStmt | CompoundStmt ;
+    SimpleStmt     = Assignment | ExprStmt | PassStmt | BreakStmt | ContinueStmt | ReturnStmt ;
+    CompoundStmt   = IfStmt | WhileStmt | ForStmt | FunctionDef | ClassDef | TryStmt ;
+    Assignment     = (Identifier | TupleTarget) "=" Expression ;
+    Expression     = Lambda | IfExpr | OrTest ;
+    OrTest         = AndTest { "or" AndTest } ;
+    AndTest        = NotTest { "and" NotTest } ;
+    NotTest        = "not" NotTest | Comparison ;
+    Comparison     = Expr { CompOp Expr } ;
+    CompOp         = "<" | ">" | "==" | ">=" | "<=" | "!=" | "in" | "not in" | "is" | "is not" ;
+    Expr           = Term { ("+" | "-") Term } ;
+    Term           = Factor { ("*" | "/" | "//" | "%" | "@") Factor } ;
+    Factor         = ("+" | "-" | "~") Factor | Power ;
+    Power          = Primary { "**" Factor } ;
+    Primary        = Literal | Identifier | "(" Expression ")" | "[" [ExpressionList] "]" | "{" [DictItems] "}" | Primary "." Identifier | Primary "(" [ArgList] ")" | Primary "[" Expression "]" ;
+    Literal        = String | Number | "True" | "False" | "None" ;
+    IfStmt         = "if" Expression ":" Suite { "elif" Expression ":" Suite } ["else" ":" Suite] ;
+    WhileStmt      = "while" Expression ":" Suite ["else" ":" Suite] ;
+    ForStmt        = "for" TargetList "in" Expression ":" Suite ["else" ":" Suite] ;
+    FunctionDef    = "def" Identifier "(" [Parameters] ")" ["->" Expression] ":" Suite ;
+    ClassDef       = "class" Identifier ["(" [ArgList] ")"] ":" Suite ;
+    TryStmt        = "try" ":" Suite { ExceptClause } ["else" ":" Suite] ["finally" ":" Suite] ;
+    Suite          = SimpleStmt { ";" SimpleStmt } [";"] NEWLINE INDENT { Statement } DEDENT ;
 
 It is deliberately self-contained so it can be uploaded as one Python file.
 The public ``parse_source`` function returns both a concrete parse tree and an
@@ -20,7 +41,7 @@ from typing import Any, Iterable, NoReturn
 
 
 class ParseError(ValueError):
-    """Raised when source text does not conform to the mini-language grammar."""
+    """Raised when source text does not conform to the Python grammar."""
 
 
 @dataclass(frozen=True)
@@ -28,6 +49,8 @@ class Token:
     kind: str
     value: str
     position: int
+    line: int
+    column: int
 
 
 @dataclass(frozen=True)
@@ -36,28 +59,80 @@ class Program:
 
 
 @dataclass(frozen=True)
-class VarDeclaration:
-    name: str
-    initializer: Any
+class Assignment:
+    targets: list[Any]
+    value: Any
 
 
 @dataclass(frozen=True)
-class Assignment:
-    name: str
-    value: Any
+class ExprStatement:
+    expression: Any
+
+
+@dataclass(frozen=True)
+class PassStatement:
+    pass
+
+
+@dataclass(frozen=True)
+class BreakStatement:
+    pass
+
+
+@dataclass(frozen=True)
+class ContinueStatement:
+    pass
+
+
+@dataclass(frozen=True)
+class ReturnStatement:
+    value: Any | None
 
 
 @dataclass(frozen=True)
 class IfStatement:
     condition: Any
     then_branch: list[Any]
-    else_branch: list[Any] | None = None
+    elif_branches: list[tuple[Any, list[Any]]]
+    else_branch: list[Any] | None
 
 
 @dataclass(frozen=True)
 class WhileStatement:
     condition: Any
     body: list[Any]
+    else_branch: list[Any] | None
+
+
+@dataclass(frozen=True)
+class ForStatement:
+    target: Any
+    iterable: Any
+    body: list[Any]
+    else_branch: list[Any] | None
+
+
+@dataclass(frozen=True)
+class FunctionDef:
+    name: str
+    params: list[Any]
+    returns: Any | None
+    body: list[Any]
+
+
+@dataclass(frozen=True)
+class ClassDef:
+    name: str
+    bases: list[Any]
+    body: list[Any]
+
+
+@dataclass(frozen=True)
+class TryStatement:
+    body: list[Any]
+    except_clauses: list[tuple[Any | None, Any | None, list[Any]]]
+    else_branch: list[Any] | None
+    finally_branch: list[Any] | None
 
 
 @dataclass(frozen=True)
@@ -75,7 +150,7 @@ class UnaryExpression:
 
 @dataclass(frozen=True)
 class Literal:
-    value: int | bool
+    value: Any
 
 
 @dataclass(frozen=True)
@@ -83,19 +158,86 @@ class Identifier:
     name: str
 
 
+@dataclass(frozen=True)
+class Call:
+    func: Any
+    args: list[Any]
+    keywords: list[tuple[str | None, Any]]
+
+
+@dataclass(frozen=True)
+class Attribute:
+    value: Any
+    attr: str
+
+
+@dataclass(frozen=True)
+class Subscript:
+    value: Any
+    slice: Any
+
+
+@dataclass(frozen=True)
+class ListExpr:
+    elements: list[Any]
+
+
+@dataclass(frozen=True)
+class DictExpr:
+    items: list[tuple[Any, Any]]
+
+
+@dataclass(frozen=True)
+class TupleExpr:
+    elements: list[Any]
+
+
+@dataclass(frozen=True)
+class LambdaExpr:
+    params: list[Any]
+    body: Any
+
+
+@dataclass(frozen=True)
+class IfExpression:
+    test: Any
+    body: Any
+    orelse: Any
+
+
+@dataclass(frozen=True)
+class Compare:
+    left: Any
+    ops: list[tuple[str, Any]]
+
+
 TOKEN_RE = re.compile(
     r"""
-    (?P<WHITESPACE>\s+)
-  | (?P<COMMENT>//[^\n]*)
-  | (?P<NUMBER>\d+)
+    (?P<WHITESPACE>[ \t\f]+)
+  | (?P<NEWLINE>\n)
+  | (?P<COMMENT>#[^\n]*)
+  | (?P<STRING>\"\"\"[\s\S]*?\"\"\"|\'\'\'[\s\S]*?\'\'\'|\"[^\n\"]*\"|\'[^\n\']*\')
+  | (?P<NUMBER>\d+\.\d*|\.\d+|\d+[eE][+-]?\d+|\d+\.\d*[eE][+-]?\d+|\d+)
+  | (?P<ELLIPSIS>\.\.\.)
+  | (?P<OP>\+=|-=|\*=|/=|//=|%=|@=|\*\*=|\|=|&=|\^=|>>=|<<=|\*\*|//|<<|>>|<=|>=|==|!=|[+\-*/%@<>=&|^~:.,;@])
   | (?P<IDENTIFIER>[A-Za-z_][A-Za-z0-9_]*)
-  | (?P<OP>==|!=|<=|>=|[+\-*/<>=])
-  | (?P<PUNCT>[;(),{}])
+  | (?P<INDENT>INDENT)
+  | (?P<DEDENT>DEDENT)
     """,
     re.VERBOSE,
 )
 
-KEYWORDS = {"let", "const", "var", "if", "else", "while", "true", "false"}
+PYTHON_KEYWORDS = {
+    "False", "None", "True", "and", "as", "assert", "async", "await",
+    "break", "class", "continue", "def", "del", "elif", "else", "except",
+    "finally", "for", "from", "global", "if", "import", "in", "is",
+    "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try",
+    "while", "with", "yield", "match", "case", "type"
+}
+
+SOFT_KEYWORDS = {"_", "match", "case", "type"}
+
+COMPARISON_OPS = {"<", ">", "<=", ">=", "==", "!=", "in", "not in", "is", "is not"}
 
 
 def tokenize(source: str) -> list[Token]:

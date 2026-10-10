@@ -79,29 +79,31 @@
               <span class="bot-label">SYNTAX ENGINE</span>
             </div>
             <div class="preset-group">
-              <span class="preset-label">Presets:</span>
-              <button class="preset-btn" data-code="let total = 10 + 5;">VarDecl</button>
-              <button class="preset-btn" data-code="if (score >= 75) { passed = true; }">IfStmt</button>
-              <button class="preset-btn" data-code="while (count < 10) { count = count + 1; }">WhileLoop</button>
+              <span class="preset-label">Python examples:</span>
+              <button class="preset-btn" data-code="total = 10 + 5&#10;print(total)">Basics</button>
+              <button class="preset-btn" data-code="if score >= 75:&#10;    passed = True&#10;else:&#10;    passed = False">If</button>
+              <button class="preset-btn" data-code="for number in range(3):&#10;    print(number)">Loop</button>
             </div>
           </div>
 
           <div class="bot-message-box">
             <p class="bot-prompt">
-              &gt; <strong>EBNF:</strong> Enter a single or multi-line statement in the target mini-language.
+              &gt; <strong>PYTHON:</strong> Enter Python source or upload a <code>.py</code> file.
             </p>
           </div>
 
           <div class="input-row">
-            <input 
-              type="text" 
+            <textarea
               id="codeInput" 
-              placeholder="e.g. let score = 10 + 5;" 
+              placeholder="e.g. total = 10 + 5&#10;print(total)"
               autocomplete="off" 
               spellcheck="false" 
-              value="let total = 10 + 5;"
-            />
-            <button id="runBtn" class="run-btn" aria-label="Tokenize input" title="Tokenize input">&rarr;</button>
+              rows="4"
+            >total = 10 + 5
+print(total)</textarea>
+            <label class="upload-btn" for="sourceFile">Upload .py</label>
+            <input id="sourceFile" type="file" accept=".py,text/x-python" />
+            <button id="runBtn" class="run-btn" aria-label="Analyze input" title="Analyze input">&rarr;</button>
           </div>
         </div>
 
@@ -109,7 +111,7 @@
         <div class="tree-grid">
           <div class="tree-container">
             <div class="panel-header">
-              <h4>Concrete Parse Tree (CST)</h4>
+              <h4 id="parseTreeTitle">Concrete Parse Tree (CST)</h4>
             </div>
             <div id="parseTreeOutput" class="tree-placeholder">
               <div class="placeholder-icon">&Delta;</div>
@@ -119,13 +121,29 @@
 
           <div class="tree-container">
             <div class="panel-header">
-              <h4>Abstract Syntax Tree (AST)</h4>
+              <h4 id="astTitle">Abstract Syntax Tree (AST)</h4>
             </div>
             <div id="astOutput" class="tree-placeholder">
               <div class="placeholder-icon">&Lambda;</div>
               <p>Run code to generate the abstract syntax tree.</p>
             </div>
           </div>
+        </div>
+
+        <div class="tree-container json-tree-container">
+          <div class="panel-header">
+            <h4>AST as JSON Tree</h4>
+            <div class="mermaid-controls" aria-label="Mermaid diagram controls">
+              <button id="mermaidZoomOut" type="button" title="Zoom out">−</button>
+              <button id="mermaidZoomReset" type="button" title="Reset diagram view">Reset</button>
+              <button id="mermaidZoomIn" type="button" title="Zoom in">+</button>
+            </div>
+          </div>
+          <div id="jsonTreeOutput" class="tree-placeholder">
+            <div class="placeholder-icon">{ }</div>
+            <p>Run Python to generate the AST JSON tree.</p>
+          </div>
+          <p id="mermaidSelection" class="mermaid-selection" aria-live="polite">Click a Mermaid node to inspect it.</p>
         </div>
 
         <!-- 25% Deliverable: Token Stream Breakdown -->
@@ -154,7 +172,7 @@
       </div>
     </section>
 
-    <!-- Script File -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
     <script src="script.js"></script>
   </body>
 </html>
