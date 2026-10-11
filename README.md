@@ -1,6 +1,11 @@
 # Extended Backus–Naur Form Parse & AST Demo
 
-This project is an interactive educational web app that demonstrates the basics of EBNF (Extended Backus–Naur Form), lexical analysis, and the difference between a concrete parse tree and an abstract syntax tree (AST). It is designed as a visual learning tool for beginners exploring formal grammar and parser concepts. The browser Learning Workspace uses a C-like teaching language.
+Detailed documentation:
+
+- [Usage and function reference](./docs/USAGE.md)
+- [Code TLDRs and architecture](./docs/CODE-TLDRS.md)
+
+This project is an interactive educational web app that demonstrates EBNF (Extended Backus–Naur Form), lexical analysis, and the difference between a concrete parse tree and an abstract syntax tree (AST). It is designed as a visual learning tool for understanding how real C programs are tokenized and parsed.
 
 The app presents a dark cyberpunk-style landing page, a sand-particle background animation, and a second workspace panel where users can enter source code or upload a file and inspect its tokens, concrete parse tree, and AST.
 
@@ -12,14 +17,14 @@ The repository combines:
 
 - a styled landing page and theme toggle
 - a particle-based animated background
-- a lexer/tokenizer for the teaching language
+- a lexer/tokenizer for a practical C subset
 - a grammar table showing token classes and matching EBNF terminals
-- an explicit generated EBNF panel for the supported C-like subset
+- an explicit generated EBNF panel for the supported C subset
 - an in-browser recursive-descent parser
 - concrete parse tree and AST visualization
 - meaningful syntax errors for invalid statements and blocks
 - a learning interface for EBNF, parse tree, and AST concepts
-- a Python terminology glossary with 20+ terms
+- a parser and compiler terminology glossary with 20+ terms
 
 In short, it teaches how source code is broken down into meaningful pieces before it is parsed into a tree structure.
 
@@ -27,9 +32,7 @@ In short, it teaches how source code is broken down into meaningful pieces befor
 
 ## Core concept
 
-The browser workspace accepts the supported C-like teaching language. Its
-parser generates the displayed EBNF grammar, a concrete parse tree, and an
-abstract syntax tree from typed or uploaded source.
+The browser workspace accepts the supported C subset. Its parser generates the displayed EBNF grammar, a concrete parse tree, and an abstract syntax tree from typed or uploaded source.
 
 The flow is:
 
@@ -73,20 +76,20 @@ After clicking Start, the app transitions to a learning workspace with:
 
 - theory cards explaining EBNF, concrete parse trees, and ASTs
 - a multiline source-code console input area
-- preset buttons for statement and conditional examples
+- preset buttons for C examples
 - a source-file upload control
-- generated EBNF grammar output for valid C-like input
+- generated EBNF grammar output for valid C input
 - Mermaid concrete parse-tree and AST visualizations
 - a token table that updates live
 
 ### 4. Tokenizer / lexer
 The app contains a tokenizer that recognizes:
 
-- declaration and conditional keywords such as `let`, `const`, `var`, `if`, and `else`
+- C type and control keywords such as `int`, `if`, `for`, `while`, and `return`
 - identifiers
 - number and string literals
-- Python operators and delimiters
-- indentation, dedentation, newlines, and comments
+- C operators and delimiters
+- preprocessor directives and header names
 
 Each token is displayed with:
 
@@ -104,33 +107,50 @@ The UI is built to teach grammar concepts rather than just process code. It incl
 
 ---
 
-## Teaching-language syntax modeled by the app
+## Supported C subset
 
 The browser workspace is designed around:
 
+- function definitions
+- parameter lists
+- blocks and statements
 - variable declarations
-- assignments
-- conditionals
-- loops and function calls
+- assignment and arithmetic expressions
+- conditionals and loops
+- return statements
+- preprocessor directives such as `#include`
 
 Example inputs include:
 
-- `total = 10 + 5`
-- `if score >= 75:`
-- `    passed = True`
-- `for number in range(3):`
-- `    print(number)`
+- `int main(void) { return 0; }`
+- `int add(int a, int b) { return a + b; }`
+- `#include <stdio.h>`
+- `if (x > 10) { return x; }`
 
 The predefined EBNF grammar is:
 
-```
-Module         = { Statement } ;
-Statement      = Assignment | FunctionDef | IfStmt | ForStmt | WhileStmt | ReturnStmt | ExprStmt ;
-Assignment     = Identifier, ("=" | "+=" | "-="), Expr, NEWLINE ;
-FunctionDef    = "def", Identifier, "(", [ Parameters ], ")", ":", Suite ;
-IfStmt         = "if", Expr, ":", Suite, { "elif", Expr, ":", Suite }, [ "else", ":", Suite ] ;
-Suite          = NEWLINE, INDENT, { Statement }, DEDENT ;
-Expr           = Python expression ;
+```ebnf
+Program         = { FunctionDef | Declaration | Statement } ;
+FunctionDef     = Type, Identifier, "(", [ ParameterList ], ")", Block ;
+ParameterList   = Parameter, { ",", Parameter } ;
+Parameter       = Type, [ Identifier ] ;
+Statement       = Block | IfStmt | WhileStmt | ForStmt | ReturnStmt | Declaration | Expression, ";" ;
+IfStmt          = "if", "(", Expression, ")", Statement, [ "else", Statement ] ;
+WhileStmt       = "while", "(", Expression, ")", Statement ;
+ForStmt         = "for", "(", [ Expression | Declaration ], ";", [ Expression ], ";", [ Expression ], ")", Statement ;
+ReturnStmt      = "return", [ Expression ], ";" ;
+Expression      = Assignment ;
+Assignment      = LogicalOr, [ ("=" | "+=" | "-=" | "*=" | "/=" | "%="), Assignment ] ;
+LogicalOr       = LogicalAnd, { "||", LogicalAnd } ;
+LogicalAnd      = Equality, { "&&", Equality } ;
+Equality        = Relational, { ("==" | "!="), Relational } ;
+Relational      = Additive, { ("<" | "<=" | ">" | ">="), Additive } ;
+Additive        = Multiplicative, { ("+" | "-"), Multiplicative } ;
+Multiplicative  = Unary, { ("*" | "/" | "%"), Unary } ;
+Unary           = ("+" | "-" | "!" | "~"), Unary | Postfix ;
+Postfix         = Primary, { ("(" , [ ArgumentList ], ")" | "[" , Expression , "]" | "." , Identifier | "->" , Identifier) } ;
+ArgumentList    = Assignment, { ",", Assignment } ;
+Primary         = Number | String | Char | Identifier | "(", Expression, ")" ;
 ```
 
 This helps students connect the formal grammar to the tokens they see in the table.
@@ -182,7 +202,7 @@ Contains the functional logic for:
 - theme persistence with localStorage
 - code input handling
 - tokenization
-- recursive-descent parsing with operator precedence
+- recursive-descent parsing with C-subset grammar
 - live rendering of the token table, concrete parse tree, and AST
 
 ### ascii.jsx
@@ -196,13 +216,13 @@ AST. The file is self-contained and can be uploaded as a single Python file.
 Run it with one statement:
 
 ```bash
-python3 ebnf_parser_ast.py 'total = 10 + 5'
+python3 ebnf_parser_ast.py 'int main(void) { return 0; }'
 ```
 
 Or pipe a complete block of statements through standard input:
 
 ```bash
-printf 'for number in range(3):\n    print(number)\n' | python3 ebnf_parser_ast.py
+printf 'int add(int a, int b) { return a + b; }\nint main(void) { return add(2, 3); }\n' | python3 ebnf_parser_ast.py
 ```
 
 The JSON output contains `parse_tree` (including terminals and punctuation)
@@ -216,8 +236,9 @@ The uploadable Python file exposes these functions and types:
 ```python
 from ebnf_parser_ast import ParseError, parse_source, tokenize
 
-tokens = tokenize("let total = 10 + 5;")
-result = parse_source("let total = 10 + 5;")
+source = "int main(void) { return 0; }"
+tokens = tokenize(source)
+result = parse_source(source)
 
 print(result["parse_tree"])  # Concrete syntax tree
 print(result["ast"])         # JSON-serializable AST
@@ -231,13 +252,11 @@ print(result["ast"])         # JSON-serializable AST
 
 The browser implementation exposes the equivalent behavior through the Run
 button, presets, and file upload control. Its internal functions are
-`tokenize`, `parsePythonSource`, `renderTokens`, and `renderTrees`; they are
-intentionally scoped to the page rather than exported as a module.
+`tokenize`, `parseCSource`, `renderTokens`, and `renderTrees`; they are intentionally scoped to the page rather than exported as a module.
 
 ### AST JSON tree
 
-After valid teaching-language source is analyzed,
-the AST is automatically rendered in a separate visual JSON tree container with
+After valid C source is analyzed, the AST is automatically rendered in a separate visual JSON tree container with
 connected Mermaid nodes and branches. The diagram is generated from the AST
 after each successful analysis. Invalid source shows
 the parse error in the original CST/AST panels and does not generate a JSON
@@ -263,21 +282,13 @@ Examples:
 Each token includes a human-readable EBNF label, and valid input is parsed into
 the concrete parse tree and AST panels.
 
-The browser parser accepts declarations, assignments, conditionals, literals,
-operators, blocks, and comments. Unknown characters and malformed statements
-are reported as parse errors. It is a structural learning parser, not a
-general-purpose programming language implementation.
+The browser parser accepts C declarations, assignments, conditionals, literals, operators, blocks, and preprocessor directives. Unknown characters and malformed statements are reported as parse errors. It is a structural learning parser, not a general-purpose compiler implementation.
 
 ---
 
 ## Current limitation
 
-This repo is intentionally a learning/demo project rather than a production
-parser. The browser parser validates common Python structure and reports
-unsupported characters, but it does not implement every Python grammar rule,
-advanced error recovery, or execution. There is no artificial token or
-statement limit; practical limits are browser memory and processing time. The
-rendered tree panels are scrollable and capped visually at 360px.
+This repo is intentionally a learning/demo project rather than a production parser. The browser parser validates a practical C subset and reports unsupported characters, but it does not implement every C grammar rule, advanced error recovery, or execution. There is no artificial token or statement limit; practical limits are browser memory and processing time. The rendered tree panels are scrollable and capped visually at 360px.
 
 The practical milestones represented here are:
 
@@ -326,12 +337,12 @@ This repository is best understood as a visual teaching tool for:
 - compiler construction fundamentals
 - EBNF syntax notation
 
-It offers a friendly, interactive way to visualize how programming languages break down into meaningful units before they become executable logic.
+It offers a friendly, interactive way to visualize how C programs break down into meaningful units before they become executable logic.
 
 ---
 
 ## Summary
 
-The repo is a compact interactive app for learning EBNF and parsing fundamentals. It combines a polished user interface with a lexer, recursive-descent parser, concrete parse tree, and AST demonstration to help users see how source code is transformed into structured representations.
+The repo is a compact interactive app for learning EBNF and parsing fundamentals. It combines a polished user interface with a lexer, recursive-descent parser, concrete parse tree, and AST demonstration to help users see how C source is transformed into structured representations.
 
 It is a beginner-friendly reference implementation for understanding the front end of language processing, without yet attempting to build a complete compiler or full parser.

@@ -80,28 +80,29 @@
               <span class="bot-label">SYNTAX ENGINE</span>
             </div>
             <div class="preset-group">
-              <span class="preset-label">EBNF examples:</span>
-              <button class="preset-btn" data-code="int x = 10;">Declaration</button>
-              <button class="preset-btn" data-code="total = x + 5;">Assignment</button>
-              <button class="preset-btn" data-code="if (total &gt; 10) { total = total + 1; }">Conditional</button>
+              <span class="preset-label">C examples:</span>
+              <button class="preset-btn" data-code="int main(void) { return 0; }">Main</button>
+              <button class="preset-btn" data-code="int add(int a, int b) { return a + b; }\nint main(void) { return add(2, 3); }">Function</button>
+              <button class="preset-btn" data-code="#include &lt;stdio.h&gt;\nint main(void) { if (1) { printf(&quot;hello\n&quot;); } return 0; }">Include</button>
             </div>
           </div>
 
           <div class="bot-message-box">
             <p class="bot-prompt">
-              &gt; <strong>EBNF:</strong> Enter C-like code that follows the grammar.
+              &gt; <strong>EBNF:</strong> Enter C code that matches the supported grammar.
             </p>
           </div>
 
           <div class="input-row">
             <textarea
               id="codeInput" 
-              placeholder="e.g. int total = 10 + 5;"
+              placeholder="e.g. int main(void) { return 0; }"
               autocomplete="off" 
               spellcheck="false" 
               rows="4"
-            >int x = 10;
-int total = x + 5;</textarea>
+            >int main(void) {
+    return 0;
+}</textarea>
             <button id="runBtn" class="run-btn" aria-label="Analyze input" title="Analyze input">&rarr;</button>
           </div>
         </div>

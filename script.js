@@ -203,7 +203,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   updateThemeToggleLabels();
 
-  // --- 3. TEACHING-LANGUAGE LEXER / PARSER CORE ---
+  // --- 3. C-SUBSET LEXER / PARSER CORE ---
   const codeInput = document.getElementById("codeInput");
   const runBtn = document.getElementById("runBtn");
   const tokenTableBody = document.getElementById("tokenTableBody");
@@ -216,81 +216,96 @@ window.addEventListener("DOMContentLoaded", () => {
   const ebnfOutput = document.getElementById("ebnfOutput");
   const grammarStatus = document.getElementById("grammarStatus");
 
-  const KEYWORDS = new Set([
-    "and", "as", "assert", "async", "await", "break", "class", "continue",
-    "def", "del", "elif", "else", "except", "False", "finally", "for", "from",
-    "global", "if", "import", "in", "is", "lambda", "None", "nonlocal", "not",
-    "or", "pass", "raise", "return", "True", "try", "while", "with", "yield",
-    "int", "float", "void", "bool", "true", "false",
-  ]);
-  const OPERATORS = ["**", "//", "->", ":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=", "=>", "+", "-", "*", "/", "%", "=", "<", ">", "|", "&", "^", "~"];
-  const DELIMITERS = new Set(["(", ")", "[", "]", "{", "}", ",", ":", ".", ";"]);
+  const TYPE_KEYWORDS = new Set(["bool", "char", "const", "double", "float", "int", "long", "short", "signed", "unsigned", "void", "volatile"]);
+  const CONTROL_KEYWORDS = new Set(["if", "else", "for", "while", "return", "break", "continue", "switch", "case", "default", "sizeof"]);
+  const KEYWORDS = new Set([...TYPE_KEYWORDS, ...CONTROL_KEYWORDS, "true", "false", "NULL"]);
+  const OPERATORS = ["==", "!=", "<=", ">=", "&&", "||", "->", "+=", "-=", "*=", "/=", "%=", "=", "+", "-", "*", "/", "%", "<", ">", "!", "|", "&", "^", "~", ":", "."];
+  const DELIMITERS = new Set(["(", ")", "[", "]", "{", "}", ",", ";"]);
 
   function tokenize(code) {
     const tokens = [];
     const lines = code.replace(/\r\n?/g, "\n").split("\n");
-    const indentStack = [0];
-    lines.forEach((line, lineIndex) => {
-      const leading = line.match(/^[ \t]*/)[0].replace(/\t/g, "    ").length;
-      const content = line.slice(line.match(/^[ \t]*/)[0].length);
-      if (!content.trim() || content.trim().startsWith("#")) return;
-      if (leading > indentStack[indentStack.length - 1]) {
-        indentStack.push(leading);
-        tokens.push({ lexeme: "    ", type: "Indent", ebnf: "INDENT" });
-      } else {
-        while (leading < indentStack[indentStack.length - 1]) {
-          indentStack.pop();
-          tokens.push({ lexeme: "", type: "Dedent", ebnf: "DEDENT" });
-        }
-      }
+
+    lines.forEach((line) => {
+      if (!line.trim()) return;
+
       let i = 0;
-      while (i < content.length) {
-        const ch = content[i];
-        if (/\s/.test(ch)) { i++; continue; }
-        if (ch === "#") {
-          tokens.push({ lexeme: content.slice(i), type: "Comment", ebnf: "COMMENT" });
-          break;
+      while (i < line.length) {
+        const ch = line[i];
+
+        if (/\s/.test(ch)) {
+          i += 1;
+          continue;
         }
-        if (ch === "'" || ch === '"') {
+
+        if (ch === "#") {
+          const directiveMatch = line.slice(i).match(/^#[ \t]*[A-Za-z_][A-Za-z0-9_]*/);
+          if (directiveMatch) {
+            tokens.push({ lexeme: directiveMatch[0], type: "Preprocessor", ebnf: "PREPROCESSOR" });
+            i += directiveMatch[0].length;
+            continue;
+          }
+        }
+
+        if (ch === "<") {
+          const headerMatch = line.slice(i).match(/^<[^>\n]+>/);
+          if (headerMatch) {
+            tokens.push({ lexeme: headerMatch[0], type: "HeaderName", ebnf: "HEADER" });
+            i += headerMatch[0].length;
+            continue;
+          }
+        }
+
+        if (ch === '"' || ch === "'") {
           const quote = ch;
-          let value = ch; i++;
-          while (i < content.length) {
-            value += content[i];
-            if (content[i] === quote && content[i - 1] !== "\\") { i++; break; }
-            i++;
+          let value = ch;
+          i += 1;
+          while (i < line.length) {
+            value += line[i];
+            if (line[i] === quote && line[i - 1] !== "\\") {
+              i += 1;
+              break;
+            }
+            i += 1;
           }
           tokens.push({ lexeme: value, type: "StringLiteral", ebnf: "STRING" });
           continue;
         }
-        const number = content.slice(i).match(/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/);
+
+        const number = line.slice(i).match(/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/);
         if (number) {
           tokens.push({ lexeme: number[0], type: "NumberLiteral", ebnf: "NUMBER" });
-          i += number[0].length; continue;
+          i += number[0].length;
+          continue;
         }
-        const identifier = content.slice(i).match(/^[A-Za-z_][A-Za-z0-9_]*/);
+
+        const identifier = line.slice(i).match(/^[A-Za-z_][A-Za-z0-9_]*/);
         if (identifier) {
           const value = identifier[0];
-          tokens.push({ lexeme: value, type: KEYWORDS.has(value) ? "Keyword" : "Identifier", ebnf: KEYWORDS.has(value) ? "KEYWORD" : "NAME" });
-          i += value.length; continue;
+          const type = KEYWORDS.has(value) ? "Keyword" : "Identifier";
+          tokens.push({ lexeme: value, type, ebnf: KEYWORDS.has(value) ? "KEYWORD" : "NAME" });
+          i += value.length;
+          continue;
         }
-        const operator = OPERATORS.find((candidate) => content.startsWith(candidate, i));
+
+        const operator = OPERATORS.find((candidate) => line.startsWith(candidate, i));
         if (operator) {
           tokens.push({ lexeme: operator, type: "Operator", ebnf: "OPERATOR" });
-          i += operator.length; continue;
+          i += operator.length;
+          continue;
         }
+
         if (DELIMITERS.has(ch)) {
           tokens.push({ lexeme: ch, type: "Delimiter", ebnf: "DELIMITER" });
-          i++; continue;
+          i += 1;
+          continue;
         }
+
         tokens.push({ lexeme: ch, type: "Unknown", ebnf: "INVALID" });
-        i++;
+        i += 1;
       }
-      tokens.push({ lexeme: "\\n", type: "Newline", ebnf: "NEWLINE" });
     });
-    while (indentStack.length > 1) {
-      indentStack.pop();
-      tokens.push({ lexeme: "", type: "Dedent", ebnf: "DEDENT" });
-    }
+
     return tokens;
   }
 
@@ -356,14 +371,15 @@ window.addEventListener("DOMContentLoaded", () => {
     return node;
   }
 
-  function parseCLikeSource(code, tokens) {
+  function parseCSource(code, tokens) {
     const parserTokens = tokens
       .filter((token) => !["Newline", "Indent", "Dedent", "Comment"].includes(token.type))
       .map((token) => ({ value: token.lexeme, kind: token.type }));
     parserTokens.push({ value: "", kind: "EOF" });
+
     let index = 0;
     const current = () => parserTokens[index];
-    const leaf = (token) => ({ terminal: token.value, kind: token.kind });
+    const leaf = (token) => token ? { terminal: token.value, kind: token.kind } : null;
     const fail = (message) => { throw new Error(`${message} near ${current().value || "end of input"}`); };
     const match = (...values) => values.includes(current().value) ? parserTokens[index++] : null;
     const expect = (value) => {
@@ -375,83 +391,340 @@ window.addEventListener("DOMContentLoaded", () => {
       if (current().kind !== kind) fail(`Expected ${kind}`);
       return parserTokens[index++];
     };
-    const binary = (operand, operators, rule) => {
-      const children = [operand()];
-      while (operators.includes(current().value)) children.push(leaf(parserTokens[index++]), operand());
-      return { rule, children };
+
+    const parseParameter = () => {
+      const typeNode = leaf(parserTokens[index++]);
+      const nameNode = current().kind === "Identifier" ? leaf(parserTokens[index++]) : null;
+      return { rule: "Parameter", children: [typeNode, nameNode] };
     };
-    const expression = () => binary(comparison, ["==", "!="], "equality");
-    const comparison = () => binary(additive, ["<", "<=", ">", ">="], "relational");
-    const additive = () => binary(term, ["+", "-"], "additive");
-    const term = () => binary(factor, ["*", "/"], "term");
-    const factor = () => {
-      const unary = match("+", "-");
-      if (unary) return { rule: "Unary", children: [leaf(unary), factor()] };
-      const opening = match("(");
-      if (opening) return { rule: "Grouping", children: [leaf(opening), expression(), leaf(expect(")"))] };
+
+    const parseFunctionDefinition = () => {
+      const returnType = leaf(parserTokens[index++]);
+      const name = leaf(expectKind("Identifier"));
+      const openParen = leaf(expect("("));
+      const params = [];
+      if (current().value !== ")") {
+        params.push(parseParameter());
+        while (match(",")) params.push(parseParameter());
+      }
+      const closeParen = leaf(expect(")"));
+      const body = parseBlock();
+      return { rule: "FunctionDef", children: [returnType, name, openParen, ...params, closeParen, body] };
+    };
+
+    const parseDirective = () => {
+      const directive = leaf(parserTokens[index++]);
+      const value = current().kind === "HeaderName" || current().kind === "StringLiteral" ? leaf(parserTokens[index++]) : null;
+      return { rule: "PreprocessorDirective", children: [directive, value] };
+    };
+
+    const parsePrimary = () => {
       if (current().kind === "NumberLiteral") return { rule: "number", children: [leaf(parserTokens[index++])] };
+      if (current().kind === "StringLiteral") return { rule: "string", children: [leaf(parserTokens[index++])] };
       if (current().value === "true" || current().value === "false") return { rule: "BooleanLiteral", children: [leaf(parserTokens[index++])] };
       if (current().kind === "Identifier") return { rule: "Identifier", children: [leaf(parserTokens[index++])] };
+      if (match("(")) {
+        const inner = parseExpression();
+        expect(")");
+        return { rule: "Grouping", children: [leaf({ value: "(", kind: "Delimiter" }), inner, leaf({ value: ")", kind: "Delimiter" })] };
+      }
       fail("Expected an expression");
     };
-    const block = () => {
+
+    const parsePostfix = () => {
+      let node = parsePrimary();
+      while (true) {
+        if (match("(")) {
+          const args = [];
+          if (current().value !== ")") {
+            args.push(parseExpression());
+            while (match(",")) args.push(parseExpression());
+          }
+          expect(")");
+          node = { rule: "CallExpression", children: [node, leaf({ value: "(", kind: "Delimiter" }), ...args, leaf({ value: ")", kind: "Delimiter" })] };
+        } else if (match("[")) {
+          const indexExpr = parseExpression();
+          expect("]");
+          node = { rule: "IndexExpression", children: [node, leaf({ value: "[", kind: "Delimiter" }), indexExpr, leaf({ value: "]", kind: "Delimiter" })] };
+        } else if (match(".")) {
+          const member = expectKind("Identifier");
+          node = { rule: "MemberExpression", children: [node, leaf({ value: ".", kind: "Operator" }), leaf(member)] };
+        } else if (match("->")) {
+          const member = expectKind("Identifier");
+          node = { rule: "MemberExpression", children: [node, leaf({ value: "->", kind: "Operator" }), leaf(member)] };
+        } else {
+          break;
+        }
+      }
+      return node;
+    };
+
+    const parseUnary = () => {
+      if (match("+", "-", "!", "~")) {
+        const op = parserTokens[index - 1];
+        return { rule: "Unary", children: [leaf(op), parseUnary()] };
+      }
+      return parsePostfix();
+    };
+
+    const parseMultiplicative = () => {
+      const children = [parseUnary()];
+      while (["*", "/", "%"].includes(current().value)) {
+        children.push(leaf(parserTokens[index++]), parseUnary());
+      }
+      return { rule: "multiplicative", children };
+    };
+
+    const parseAdditive = () => {
+      const children = [parseMultiplicative()];
+      while (["+", "-"].includes(current().value)) {
+        children.push(leaf(parserTokens[index++]), parseMultiplicative());
+      }
+      return { rule: "additive", children };
+    };
+
+    const parseRelational = () => {
+      const children = [parseAdditive()];
+      while (["<", "<=", ">", ">="].includes(current().value)) {
+        children.push(leaf(parserTokens[index++]), parseAdditive());
+      }
+      return { rule: "relational", children };
+    };
+
+    const parseEquality = () => {
+      const children = [parseRelational()];
+      while (["==", "!="].includes(current().value)) {
+        children.push(leaf(parserTokens[index++]), parseRelational());
+      }
+      return { rule: "equality", children };
+    };
+
+    const parseLogicalAnd = () => {
+      const children = [parseEquality()];
+      while (current().value === "&&") {
+        children.push(leaf(parserTokens[index++]), parseEquality());
+      }
+      return { rule: "logicalAnd", children };
+    };
+
+    const parseLogicalOr = () => {
+      const children = [parseLogicalAnd()];
+      while (current().value === "||") {
+        children.push(leaf(parserTokens[index++]), parseLogicalAnd());
+      }
+      return { rule: "logicalOr", children };
+    };
+
+    const parseAssignment = () => {
+      const left = parseLogicalOr();
+      if (["=", "+=", "-=", "*=", "/=", "%="].includes(current().value)) {
+        const operator = parserTokens[index++];
+        return { rule: "Assignment", children: [left, leaf(operator), parseAssignment()] };
+      }
+      return left;
+    };
+
+    const parseExpression = () => parseAssignment();
+
+    const parseBlock = () => {
       const children = [leaf(expect("{"))];
-      while (current().value !== "}" && current().kind !== "EOF") children.push(statement());
+      while (current().value !== "}" && current().kind !== "EOF") {
+        children.push(parseStatement());
+      }
       children.push(leaf(expect("}")));
       return { rule: "Block", children };
     };
-    const declaration = () => {
-      const type = leaf(parserTokens[index++]);
-      const name = leaf(expectKind("Identifier"));
-      const children = [type, name];
-      if (match("=")) children.push(leaf(parserTokens[index - 1]), expression());
-      children.push(leaf(expect(";")));
+
+    const parseDeclaration = () => {
+      const typeNode = leaf(parserTokens[index++]);
+      const nameNode = leaf(expectKind("Identifier"));
+      const children = [typeNode, nameNode];
+      if (match("=")) {
+        children.push(leaf(parserTokens[index - 1]), parseExpression());
+      }
+      if (current().value === "[") {
+        const arrayOpen = parserTokens[index++];
+        const size = current().kind === "NumberLiteral" ? parserTokens[index++] : null;
+        expect("]");
+        children.push(leaf({ value: arrayOpen.value, kind: arrayOpen.kind }), size ? leaf(size) : null, leaf({ value: "]", kind: "Delimiter" }));
+      }
+      expect(";");
       return { rule: "declaration", children: [{ rule: "var_decl", children }] };
     };
-    const statement = () => {
-      if (["int", "float", "bool", "void"].includes(current().value)) return declaration();
-      if (current().value === "if" || current().value === "while") {
+
+    const parseStatement = () => {
+      if (current().kind === "Preprocessor") return parseDirective();
+      if (["int", "float", "double", "char", "bool", "void", "long", "short", "signed", "unsigned", "const", "volatile"].includes(current().value)) {
+        const next = parserTokens[index + 1];
+        const nextNext = parserTokens[index + 2];
+        if (next && next.kind === "Identifier" && nextNext && nextNext.value === "(") {
+          return parseFunctionDefinition();
+        }
+        return parseDeclaration();
+      }
+      if (current().value === "if") {
         const keyword = parserTokens[index++];
-        const children = [leaf(keyword), leaf(expect("(")), expression(), leaf(expect(")")), block()];
-        if (keyword.value === "if" && match("else")) children.push(leaf(parserTokens[index - 1]), block());
-        return { rule: keyword.value === "if" ? "IfStmt" : "WhileStmt", children };
+        expect("(");
+        const condition = parseExpression();
+        expect(")");
+        const thenBranch = parseStatement();
+        const children = [leaf(keyword), leaf({ value: "(", kind: "Delimiter" }), condition, leaf({ value: ")", kind: "Delimiter" }), thenBranch];
+        if (match("else")) {
+          children.push(leaf({ value: "else", kind: "Keyword" }), parseStatement());
+        }
+        return { rule: "IfStmt", children };
       }
+      if (current().value === "while") {
+        const keyword = parserTokens[index++];
+        expect("(");
+        const condition = parseExpression();
+        expect(")");
+        const body = parseStatement();
+        return { rule: "WhileStmt", children: [leaf(keyword), leaf({ value: "(", kind: "Delimiter" }), condition, leaf({ value: ")", kind: "Delimiter" }), body] };
+      }
+      if (current().value === "for") {
+        const keyword = parserTokens[index++];
+        expect("(");
+        const init = current().value === ";" ? null : parseExpression();
+        expect(";");
+        const condition = current().value === ";" ? null : parseExpression();
+        expect(";");
+        const update = current().value === ")" ? null : parseExpression();
+        expect(")");
+        const body = parseStatement();
+        return { rule: "ForStmt", children: [leaf(keyword), leaf({ value: "(", kind: "Delimiter" }), init ? init : leaf({ value: ";", kind: "Delimiter" }), condition ? condition : leaf({ value: ";", kind: "Delimiter" }), update ? update : leaf({ value: ";", kind: "Delimiter" }), body] };
+      }
+      if (current().value === "return") {
+        const keyword = parserTokens[index++];
+        const value = current().value === ";" ? null : parseExpression();
+        expect(";");
+        return { rule: "ReturnStmt", children: [leaf(keyword), value ? value : null, leaf({ value: ";", kind: "Delimiter" })] };
+      }
+      if (current().value === "{") return parseBlock();
       if (current().kind === "Identifier") {
-        const children = [leaf(expectKind("Identifier")), leaf(expect("=")), expression(), leaf(expect(";"))];
-        return { rule: "Assignment", children };
+        const statementStart = index;
+        const name = leaf(expectKind("Identifier"));
+        if (match("=")) {
+          const assignee = parseExpression();
+          expect(";");
+          return { rule: "Assignment", children: [name, leaf({ value: "=", kind: "Operator" }), assignee, leaf({ value: ";", kind: "Delimiter" })] };
+        }
+        if (["+=", "-=", "*=", "/=", "%="].includes(current().value)) {
+          const op = leaf(parserTokens[index++]);
+          const assignee = parseExpression();
+          expect(";");
+          return { rule: "Assignment", children: [name, op, assignee, leaf({ value: ";", kind: "Delimiter" })] };
+        }
+        index = statementStart;
+        const expr = parseExpression();
+        expect(";");
+        return { rule: "ExpressionStmt", children: [expr, leaf({ value: ";", kind: "Delimiter" })] };
       }
-      fail("Expected a C-like declaration, assignment, if statement, or while statement");
+
+      const expr = parseExpression();
+      expect(";");
+      return { rule: "ExpressionStmt", children: [expr, leaf({ value: ";", kind: "Delimiter" })] };
     };
+
     const parseTree = { rule: "Program", children: [] };
-    while (current().kind !== "EOF") parseTree.children.push(statement());
+    while (current().kind !== "EOF") {
+      parseTree.children.push(parseStatement());
+    }
+
     const astExpression = (node) => {
-      if (["equality", "relational", "additive", "term"].includes(node.rule)) {
-        let result = astExpression(node.children[0]);
-        for (let i = 1; i < node.children.length; i += 2) result = { type: "BinaryExpression", operator: node.children[i].terminal, left: result, right: astExpression(node.children[i + 1]) };
-        return result;
-      }
-      if (node.rule === "Unary") return { type: "UnaryExpression", operator: node.children[0].terminal, operand: astExpression(node.children[1]) };
-      if (node.rule === "Grouping") return astExpression(node.children[1]);
+      if (!node || typeof node !== "object") return node;
+      if (Array.isArray(node)) return node.map(astExpression);
       if (node.rule === "number") return { type: "Literal", value: Number(node.children[0].terminal) };
+      if (node.rule === "string") return { type: "Literal", value: node.children[0].terminal.slice(1, -1) };
       if (node.rule === "BooleanLiteral") return { type: "Literal", value: node.children[0].terminal === "true" };
-      return { type: "Identifier", name: node.children[0].terminal };
-    };
-    const astStatement = (node) => {
-      const children = node.children;
-      if (node.rule === "declaration") {
-        const declarationChildren = children[0].children;
-        return { type: "VariableDeclaration", dataType: declarationChildren[0].terminal, name: declarationChildren[1].terminal, initializer: declarationChildren.length === 5 ? astExpression(declarationChildren[3]) : null };
+      if (node.rule === "Identifier") return { type: "Identifier", name: node.children[0].terminal };
+      if (node.rule === "Unary") return { type: "UnaryExpression", operator: node.children[0].terminal, operand: astExpression(node.children[1]) };
+      if (["multiplicative", "additive", "relational", "equality", "logicalAnd", "logicalOr"].includes(node.rule)) {
+        let left = astExpression(node.children[0]);
+        for (let i = 1; i < node.children.length; i += 2) {
+          left = { type: "BinaryExpression", operator: node.children[i].terminal, left, right: astExpression(node.children[i + 1]) };
+        }
+        return left;
       }
-      if (node.rule === "Assignment") return { type: "Assignment", name: children[0].terminal, value: astExpression(children[2]) };
-      const body = children[4].children.slice(1, -1).map(astStatement);
-      if (node.rule === "WhileStmt") return { type: "WhileStatement", condition: astExpression(children[2]), body };
-      return { type: "IfStatement", condition: astExpression(children[2]), thenBranch: body, elseBranch: children[6] ? children[6].children.slice(1, -1).map(astStatement) : null };
+      if (node.rule === "Grouping") return astExpression(node.children[1]);
+      if (node.rule === "Assignment") {
+        const leftNode = node.children[0];
+        const op = node.children[1].terminal;
+        return { type: "AssignmentExpression", operator: op, left: astExpression(leftNode), right: astExpression(node.children[2]) };
+      }
+      if (node.rule === "CallExpression") {
+        const args = node.children.slice(2, -1).filter((child) => child && child.terminal !== "(" && child.terminal !== ")" && child.terminal !== ",");
+        return { type: "CallExpression", callee: astExpression(node.children[0]), arguments: args.map(astExpression) };
+      }
+      if (node.rule === "IndexExpression") {
+        return { type: "IndexExpression", object: astExpression(node.children[0]), index: astExpression(node.children[2]) };
+      }
+      if (node.rule === "MemberExpression") {
+        return { type: "MemberExpression", object: astExpression(node.children[0]), property: node.children[2].terminal, operator: node.children[1].terminal };
+      }
+      if (node.rule === "PreprocessorDirective") {
+        return { type: "PreprocessorDirective", directive: node.children[0]?.terminal, value: node.children[1]?.terminal || null };
+      }
+      return node;
     };
+
+    const astStatement = (node) => {
+      if (node.rule === "FunctionDef") {
+        const params = node.children.slice(3, -2).filter((child) => child && child.rule === "Parameter").map((param) => ({
+          type: "Parameter",
+          typeName: param.children[0]?.terminal,
+          name: param.children[1]?.terminal || null,
+        }));
+        return {
+          type: "FunctionDefinition",
+          returnType: node.children[0].terminal,
+          name: node.children[1].terminal,
+          parameters: params,
+          body: node.children[node.children.length - 1].children.slice(1, -1).map(astStatement),
+        };
+      }
+      if (node.rule === "PreprocessorDirective") {
+        return { type: "PreprocessorDirective", directive: node.children[0].terminal, value: node.children[1]?.terminal || null };
+      }
+      if (node.rule === "declaration") {
+        const children = node.children[0].children;
+        const initializer = children[2] && children[2].terminal === "=" ? astExpression(children[3]) : null;
+        return { type: "VariableDeclaration", dataType: children[0].terminal, name: children[1].terminal, initializer };
+      }
+      if (node.rule === "Assignment") return { type: "Assignment", target: astExpression(node.children[0]), operator: node.children[1].terminal, value: astExpression(node.children[2]) };
+      if (node.rule === "IfStmt") {
+        const condition = astExpression(node.children[2]);
+        const thenBranch = node.children[4].rule === "Block" ? node.children[4].children.slice(1, -1).map(astStatement) : [astStatement(node.children[4])];
+        const elseBranch = node.children.length > 6 ? (node.children[6].rule === "Block" ? node.children[6].children.slice(1, -1).map(astStatement) : [astStatement(node.children[6])]) : null;
+        return { type: "IfStatement", condition, thenBranch, elseBranch };
+      }
+      if (node.rule === "WhileStmt") {
+        const bodyNode = node.children[4];
+        const body = bodyNode.rule === "Block" ? bodyNode.children.slice(1, -1).map(astStatement) : [astStatement(bodyNode)];
+        return { type: "WhileStatement", condition: astExpression(node.children[2]), body };
+      }
+      if (node.rule === "ForStmt") {
+        const bodyNode = node.children[5];
+        const body = bodyNode.rule === "Block" ? bodyNode.children.slice(1, -1).map(astStatement) : [astStatement(bodyNode)];
+        return {
+          type: "ForStatement",
+          init: node.children[2] && node.children[2].rule !== "Delimiter" ? astExpression(node.children[2]) : null,
+          condition: node.children[3] && node.children[3].rule !== "Delimiter" ? astExpression(node.children[3]) : null,
+          update: node.children[4] && node.children[4].rule !== "Delimiter" ? astExpression(node.children[4]) : null,
+          body,
+        };
+      }
+      if (node.rule === "ReturnStmt") return { type: "ReturnStatement", value: node.children[1] ? astExpression(node.children[1]) : null };
+      if (node.rule === "ExpressionStmt") return { type: "ExpressionStatement", expression: astExpression(node.children[0]) };
+      if (node.rule === "Block") return { type: "Block", statements: node.children.slice(1, -1).map(astStatement) };
+      return { type: "Unknown", node };
+    };
+
     return { parseTree, ast: { type: "Program", statements: parseTree.children.map(astStatement) } };
   }
 
   function parseSource(code, tokens) {
-    return parseCLikeSource(code, tokens);
+    return parseCSource(code, tokens);
     /* Legacy parser retained below for reference. */
     const lines = code.replace(/\r\n?/g, "\n").split("\n");
     const leaf = (value, kind = "Identifier") => ({ terminal: value, kind });
@@ -550,7 +823,7 @@ window.addEventListener("DOMContentLoaded", () => {
         ast.body.push({ type: "ExpressionStatement", expression: expressionAst(text) });
         return;
       }
-      throw new Error(`Unsupported C-like statement on line ${lineNumber} near ${text}`);
+      throw new Error(`Unsupported C statement on line ${lineNumber} near ${text}`);
     });
     return { parseTree: cst, ast };
   }
@@ -596,7 +869,7 @@ window.addEventListener("DOMContentLoaded", () => {
     };
     const ast = { type: "Module", body: meaningful.map((line) => astForLine(line.text)) };
     const invalid = tokens.find((token) => token.type === "Unknown");
-    if (invalid) throw new Error(`Unsupported C-like character "${invalid.lexeme}"`);
+    if (invalid) throw new Error(`Unsupported C character "${invalid.lexeme}"`);
     return { parseTree: cst, ast };
   }
 
@@ -825,9 +1098,9 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 
   const grammarExamples = [
-  "int x = 10;",
-  "total = x + 5;",
-  "if (total > 10) { total = total + 1; }",
+    "int main(void) { return 0; }",
+    "int add(int a, int b) { return a + b; }\nint main(void) { return add(2, 3); }",
+    "#include <stdio.h>\nint main(void) { printf(\"hello\\n\"); return 0; }",
   ];
 
   presetBtns.forEach((btn, index) => {
