@@ -174,7 +174,7 @@ Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expres
         <div class="tree-container json-tree-container">
           <div class="panel-header">
             <h4>AST as JSON Tree</h4>
-            <div class="mermaid-controls" aria-label="Mermaid diagram controls">
+            <div class="mermaid-controls" aria-label="D3 tree controls">
               <button id="mermaidZoomOut" type="button" title="Zoom out">−</button>
               <button id="mermaidZoomReset" type="button" title="Reset diagram view">Reset</button>
               <button id="mermaidZoomIn" type="button" title="Zoom in">+</button>
@@ -184,7 +184,7 @@ Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expres
             <div class="placeholder-icon">{ }</div>
             <p>Run Python to generate the AST JSON tree.</p>
           </div>
-          <p id="mermaidSelection" class="mermaid-selection" aria-live="polite">Click a Mermaid node to inspect it.</p>
+          <p id="mermaidSelection" class="mermaid-selection" aria-live="polite">Click a D3 node to inspect it.</p>
         </div>
 
         <!-- 25% Deliverable: Token Stream Breakdown -->
@@ -213,7 +213,7 @@ Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expres
       </div>
     </section>
 
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
     <script src="script.js"></script>
   </body>
 </html>

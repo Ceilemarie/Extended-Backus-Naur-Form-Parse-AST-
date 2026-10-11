@@ -383,126 +383,140 @@ Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expres
     ebnfOutput.innerHTML = `<pre class="ebnf-block">${escapeHtml(EBNF_GRAMMAR)}</pre>`;
   }
 
-  function renderJsonTree(code) {
+  function createD3TreeData(value, label = "root") {
+    if (value === null) return { name: label || "null", value: "null" };
+    if (Array.isArray(value)) {
+      return {
+        name: label || "array",
+        children: value.map((entry, index) => createD3TreeData(entry, `${label}[${index}]`)),
+      };
+    }
+    if (typeof value === "object") {
+      const entries = Object.entries(value);
+      return {
+        name: label || "object",
+        children: entries.map(([key, child]) => createD3TreeData(child, key)),
+      };
+    }
+    return { name: label || "value", value: String(value) };
+  }
+
+  function renderJsonTree(ast) {
     jsonTreeOutput.classList.remove("tree-output", "tree-error");
     jsonTreeOutput.innerHTML = "";
-    if (!code) {
+
+    if (!ast || !ast.body || !ast.body.length) {
       jsonTreeOutput.innerHTML = "<p>Run Python to generate the AST JSON tree.</p>";
       return;
     }
-    if (!window.mermaid) {
+
+    if (!window.d3) {
       jsonTreeOutput.classList.add("tree-error");
-      jsonTreeOutput.innerHTML = "<p>Mermaid could not be loaded. Check your connection and reload the page.</p>";
+      jsonTreeOutput.innerHTML = "<p>D3 could not be loaded. Check your connection and reload the page.</p>";
       return;
     }
-    const diagram = buildMermaidTree(code);
-    jsonTreeOutput.classList.add("tree-output");
-    window.mermaid.render(`pythonAstTree${Date.now()}`, diagram)
-      .then(({ svg }) => {
-        jsonTreeOutput.innerHTML = svg;
-        mermaidScale = 1;
-        mermaidOffset = { x: 0, y: 0 };
-        setupMermaidInteractions();
-      })
-      .catch((error) => {
-        jsonTreeOutput.classList.add("tree-error");
-        jsonTreeOutput.innerHTML = `<p>Unable to render Mermaid tree: ${escapeHtml(error.message)}</p>`;
-      });
-  }
 
-  function setupMermaidInteractions() {
-    const svg = jsonTreeOutput.querySelector("svg");
-    if (!svg) return;
+    const treeData = createD3TreeData(ast, "Module");
+    const width = 1600;
+    const height = 1000;
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("width", "100%");
+    svg.setAttribute("height", "100%");
+    svg.style.overflow = "visible";
+    svg.style.maxWidth = "none";
     svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", "Interactive Python AST diagram");
-    svg.style.transformOrigin = "top left";
-    applyMermaidTransform();
-    jsonTreeOutput.querySelectorAll(".node").forEach((node) => {
-      node.setAttribute("tabindex", "0");
-      node.addEventListener("click", () => selectMermaidNode(node));
-      node.addEventListener("keydown", (event) => {
+    svg.setAttribute("aria-label", "Interactive Python AST tree");
+
+    const root = d3.hierarchy(treeData);
+    const treeLayout = d3.tree().nodeSize([30, 180]);
+    treeLayout(root);
+
+    const outer = d3.select(svg).append("g").attr("transform", "translate(90, 70)");
+
+    outer.append("g")
+      .selectAll("path")
+      .data(root.links())
+      .join("path")
+      .attr("fill", "none")
+      .attr("stroke", "#2dd4bf")
+      .attr("stroke-width", 1.5)
+      .attr("d", d3.linkHorizontal()
+        .x((d) => d.y)
+        .y((d) => d.x));
+
+    const nodeGroups = outer.append("g")
+      .selectAll("g")
+      .data(root.descendants())
+      .join("g")
+      .attr("transform", (d) => `translate(${d.y},${d.x})`)
+      .style("cursor", "pointer");
+
+    nodeGroups.append("rect")
+      .attr("x", -8)
+      .attr("y", -12)
+      .attr("width", (d) => Math.max(90, (d.data.name || d.data.value || "node").length * 7.2 + 28))
+      .attr("height", 28)
+      .attr("rx", 8)
+      .attr("fill", "#0f172a")
+      .attr("stroke", "#2dd4bf")
+      .attr("stroke-width", 1.5);
+
+    nodeGroups.append("text")
+      .attr("dy", 4)
+      .attr("x", 8)
+      .attr("text-anchor", "start")
+      .attr("fill", "#e2e8f0")
+      .attr("font-size", 11)
+      .text((d) => truncateLabel(formatD3NodeLabel(d.data)));
+
+    nodeGroups
+      .on("click", (event, d) => {
+        if (mermaidSelection) mermaidSelection.textContent = `Selected: ${formatD3NodeLabel(d.data)}`;
+      })
+      .attr("tabindex", 0)
+      .on("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          selectMermaidNode(node);
+          const current = event.currentTarget.__data__;
+          if (mermaidSelection) mermaidSelection.textContent = `Selected: ${formatD3NodeLabel(current.data)}`;
         }
       });
+
+    jsonTreeOutput.classList.add("tree-output");
+    jsonTreeOutput.appendChild(svg);
+
+    const zoomBehavior = d3.zoom().scaleExtent([0.35, 3]).on("zoom", (event) => {
+      outer.attr("transform", event.transform);
+    });
+
+    d3.select(svg).call(zoomBehavior);
+
+    mermaidZoomIn.addEventListener("click", () => {
+      d3.select(svg).transition().duration(120).call(zoomBehavior.scaleBy, 1.15);
+    });
+
+    mermaidZoomOut.addEventListener("click", () => {
+      d3.select(svg).transition().duration(120).call(zoomBehavior.scaleBy, 1 / 1.15);
+    });
+
+    mermaidZoomReset.addEventListener("click", () => {
+      d3.select(svg).transition().duration(180).call(zoomBehavior.transform, d3.zoomIdentity);
     });
   }
 
-  function selectMermaidNode(node) {
-    jsonTreeOutput.querySelectorAll(".node.selected").forEach((selected) => selected.classList.remove("selected"));
-    node.classList.add("selected");
-    mermaidSelection.textContent = `Selected: ${node.querySelector("text")?.textContent || "AST node"}`;
+  function formatD3NodeLabel(data) {
+    const key = data && data.name ? String(data.name) : "node";
+    if (data && Object.prototype.hasOwnProperty.call(data, "value") && data.value !== undefined && data.value !== null) {
+      return `${key}: ${String(data.value)}`;
+    }
+    return key;
   }
 
-  function applyMermaidTransform() {
-    const svg = jsonTreeOutput.querySelector("svg");
-    if (svg) svg.style.transform = `translate(${mermaidOffset.x}px, ${mermaidOffset.y}px) scale(${mermaidScale})`;
-  }
-
-  mermaidZoomIn.addEventListener("click", () => {
-    mermaidScale = Math.min(3, mermaidScale + 0.15);
-    applyMermaidTransform();
-  });
-
-  mermaidZoomOut.addEventListener("click", () => {
-    mermaidScale = Math.max(0.35, mermaidScale - 0.15);
-    applyMermaidTransform();
-  });
-
-  mermaidZoomReset.addEventListener("click", () => {
-    mermaidScale = 1;
-    mermaidOffset = { x: 0, y: 0 };
-    applyMermaidTransform();
-  });
-
-  let mermaidDrag;
-  jsonTreeOutput.addEventListener("pointerdown", (event) => {
-    if (event.target.closest(".node")) return;
-    mermaidDrag = { x: event.clientX, y: event.clientY, offsetX: mermaidOffset.x, offsetY: mermaidOffset.y };
-    jsonTreeOutput.setPointerCapture(event.pointerId);
-    jsonTreeOutput.classList.add("is-panning");
-  });
-
-  jsonTreeOutput.addEventListener("pointermove", (event) => {
-    if (!mermaidDrag) return;
-    mermaidOffset.x = mermaidDrag.offsetX + event.clientX - mermaidDrag.x;
-    mermaidOffset.y = mermaidDrag.offsetY + event.clientY - mermaidDrag.y;
-    applyMermaidTransform();
-  });
-
-  jsonTreeOutput.addEventListener("pointerup", () => {
-    mermaidDrag = null;
-    jsonTreeOutput.classList.remove("is-panning");
-  });
-
-  function buildMermaidTree(value) {
-    const lines = ["flowchart TD"];
-    let nodeIndex = 0;
-    const addNode = (nodeValue, key = "root", parentId = null) => {
-      const id = `node${nodeIndex++}`;
-      const label = `${key}: ${formatTreeValue(nodeValue)}`;
-      lines.push(`${id}["${mermaidLabel(label)}"]`);
-      if (parentId) lines.push(`${parentId} --> ${id}`);
-      if (nodeValue && typeof nodeValue === "object") {
-        Object.entries(nodeValue).forEach(([childKey, childValue]) => addNode(childValue, childKey, id));
-      }
-    };
-    addNode(value);
-    return lines.join("\n");
-  }
-
-  function formatTreeValue(value) {
-    if (value === null) return "null";
-    if (typeof value === "object") return Array.isArray(value) ? "[ ]" : "{ }";
-    return String(value);
-  }
-
-  function mermaidLabel(value) {
-    return value
-      .replace(/\\/g, "\\\\")
-      .replace(/"/g, "#quot;")
-      .replace(/\n/g, " ");
+  function truncateLabel(value) {
+    const text = String(value || "node");
+    return text.length > 30 ? `${text.slice(0, 27)}...` : text;
   }
 
   function parseSource(code, tokens) {
