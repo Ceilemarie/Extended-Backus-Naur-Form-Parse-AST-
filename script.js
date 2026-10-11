@@ -223,6 +223,24 @@ window.addEventListener("DOMContentLoaded", () => {
   ]);
   const OPERATORS = ["**", "//", "->", ":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=", "=>", "+", "-", "*", "/", "%", "=", "<", ">", "|", "&", "^", "~"];
   const DELIMITERS = new Set(["(", ")", "[", "]", "{", "}", ",", ":", ".", ";"]);
+  const EBNF_GRAMMAR = `Program = { Statement } ;
+Statement = Assignment | IfStmt | WhileStmt | ReturnStmt | ExprStmt ;
+Assignment = Identifier, "=", Expression, NEWLINE ;
+IfStmt = "if", Expression, ":", Suite,
+         { "elif", Expression, ":", Suite },
+         [ "else", ":", Suite ] ;
+WhileStmt = "while", Expression, ":", Suite ;
+ReturnStmt = "return", [ Expression ], NEWLINE ;
+ExprStmt = Expression, NEWLINE ;
+Suite = NEWLINE, INDENT, { Statement }, DEDENT ;
+Expression = OrExpr ;
+OrExpr = AndExpr, { "or", AndExpr } ;
+AndExpr = CompareExpr, { "and", CompareExpr } ;
+CompareExpr = AddExpr, [ CompOp, AddExpr ] ;
+AddExpr = MulExpr, { ("+" | "-"), MulExpr } ;
+MulExpr = UnaryExpr, { ("*" | "/" | "%" | "//"), UnaryExpr } ;
+UnaryExpr = [ ("+" | "-") ], Primary ;
+Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expression, ")" ;`;
 
   function tokenize(code) {
     const tokens = [];
@@ -359,6 +377,11 @@ window.addEventListener("DOMContentLoaded", () => {
     parserTokens.push({ value: "", kind: "EOF" });
     let index = 0;
     const current = () => parserTokens[index];
+    const skipSeparators = () => {
+      while (["Newline", "Indent", "Dedent"].includes(current().kind)) {
+        index += 1;
+      }
+    };
     const leaf = (token) => ({ terminal: token.value, kind: token.kind });
     const error = (message) => {
       throw new Error(`${message} near ${current().value || "end of input"}`);
@@ -451,7 +474,12 @@ window.addEventListener("DOMContentLoaded", () => {
       error("Expected a statement");
     };
     const cst = { rule: "Program", children: [] };
-    while (current().kind !== "EOF") cst.children.push(statement());
+    while (current().kind !== "EOF") {
+      skipSeparators();
+      if (current().kind === "EOF") break;
+      cst.children.push(statement());
+      skipSeparators();
+    }
     const astExpression = (node) => {
       if (["equality", "relational", "additive", "term", "Factor"].includes(node.rule)) {
         let result = astExpression(node.children[0]);
@@ -534,6 +562,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderTrees(code, tokens) {
+    renderEbnf();
     parseTreeOutput.classList.remove("tree-output", "tree-error");
     astOutput.classList.remove("tree-output", "tree-error");
     if (!code.trim()) {
@@ -542,6 +571,7 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
     try {
+      const result = parseSource(code, tokens);
       const result = parseSource(code, tokens);
       parseTreeOutput.classList.add("tree-output");
       astOutput.classList.add("tree-output");
@@ -673,7 +703,16 @@ window.addEventListener("DOMContentLoaded", () => {
     reader.readAsText(file);
   });
 
-  presetBtns.forEach((btn) => {
+  const grammarExamples = [
+    "total = 10 + 5\nprint(total)",
+    "if score >= 75:\n    passed = True\nelse:\n    passed = False",
+    "count = 0\nwhile count < 3:\n    count = count + 1",
+  ];
+
+  presetBtns.forEach((btn, index) => {
+    if (grammarExamples[index]) {
+      btn.setAttribute("data-code", grammarExamples[index]);
+    }
     btn.addEventListener("click", () => {
       codeInput.value = btn.getAttribute("data-code");
       runLexer();

@@ -1,6 +1,6 @@
 # Extended Backus–Naur Form Parse & AST Demo
 
-This project is an interactive educational web app that demonstrates the basics of EBNF (Extended Backus–Naur Form), lexical analysis, and the difference between a concrete parse tree and an abstract syntax tree (AST). It is designed as a visual learning tool for beginners exploring formal grammar and parser concepts.
+This project is an interactive educational web app that demonstrates the basics of EBNF (Extended Backus–Naur Form), lexical analysis, and the difference between a concrete parse tree and an abstract syntax tree (AST). It is designed as a visual learning tool for beginners exploring formal grammar and parser concepts, using Python as the only supported language.
 
 The app presents a dark cyberpunk-style landing page, a sand-particle background animation, and a second workspace panel where users can enter source code or upload a file and inspect its tokens, concrete parse tree, and AST.
 
@@ -14,9 +14,12 @@ The repository combines:
 - a particle-based animated background
 - a lexer/tokenizer for the teaching language
 - a grammar table showing token classes and matching EBNF terminals
+- an explicit generated EBNF panel for the supported Python subset
 - an in-browser recursive-descent parser
 - concrete parse tree and AST visualization
+- meaningful syntax errors for invalid statements and blocks
 - a learning interface for EBNF, parse tree, and AST concepts
+- a Python terminology glossary with 20+ terms
 
 In short, it teaches how source code is broken down into meaningful pieces before it is parsed into a tree structure.
 
@@ -24,9 +27,8 @@ In short, it teaches how source code is broken down into meaningful pieces befor
 
 ## Core concept
 
-The browser parser accepts the small teaching language defined below and
-generates a concrete parse tree and an abstract syntax tree from typed or
-uploaded source.
+The app accepts Python source exclusively. Its browser parser generates a
+concrete parse tree and an abstract syntax tree from typed or uploaded source.
 
 The flow is:
 
@@ -106,31 +108,27 @@ The browser workspace is designed around:
 
 - variable declarations
 - assignments
-- arithmetic expressions
-- conditional blocks
+- conditionals
+- loops and function calls
 
 Example inputs include:
 
-- `let total = 10 + 5;`
-- `total = total * 2;`
-- `if (total >= 20) { total = total - 1; }`
-- `if (total >= 20) { total = 1; } else { total = 0; }`
+- `total = 10 + 5`
+- `if score >= 75:`
+- `    passed = True`
+- `for number in range(3):`
+- `    print(number)`
 
 The predefined EBNF grammar is:
 
 ```
-Program       = { Statement } ;
-Statement     = VarDecl | Assignment | IfStmt ;
-VarDecl       = ("let" | "const" | "var") Identifier "=" Expression ";" ;
-Assignment    = Identifier "=" Expression ";" ;
-IfStmt        = "if" "(" Expression ")" Block [ "else" Block ] ;
-Block         = "{" { Statement } "}" ;
-Expression    = Comparison { ("==" | "!=") Comparison } ;
-Comparison    = Term { ("<" | "<=" | ">" | ">=") Term } ;
-Term          = Factor { ("+" | "-") Factor } ;
-Factor        = Unary { ("*" | "/" | "%") Unary } ;
-Unary         = ("+" | "-") Unary | Primary ;
-Primary       = Number | String | Boolean | Identifier | "(" Expression ")" ;
+Module         = { Statement } ;
+Statement      = Assignment | FunctionDef | IfStmt | ForStmt | WhileStmt | ReturnStmt | ExprStmt ;
+Assignment     = Identifier, ("=" | "+=" | "-="), Expr, NEWLINE ;
+FunctionDef    = "def", Identifier, "(", [ Parameters ], ")", ":", Suite ;
+IfStmt         = "if", Expr, ":", Suite, { "elif", Expr, ":", Suite }, [ "else", ":", Suite ] ;
+Suite          = NEWLINE, INDENT, { Statement }, DEDENT ;
+Expr           = Python expression ;
 ```
 
 This helps students connect the formal grammar to the tokens they see in the table.
@@ -196,19 +194,18 @@ AST. The file is self-contained and can be uploaded as a single Python file.
 Run it with one statement:
 
 ```bash
-python ebnf_parser_ast.py 'let total = 10 + 5;'
+python3 ebnf_parser_ast.py 'total = 10 + 5'
 ```
 
 Or pipe a complete block of statements through standard input:
 
 ```bash
-printf 'let total = 10 + 5;\nif (total >= 15) { total = total + 1; }\n' | python ebnf_parser_ast.py
+printf 'for number in range(3):\n    print(number)\n' | python3 ebnf_parser_ast.py
 ```
 
-Use `--ebnf` to print the predefined grammar. The normal JSON output contains
-`parse_tree` (including terminals, punctuation, and source locations) and
-`ast` (the simplified semantic structure). Invalid syntax raises a `ParseError`
-and the command-line interface reports the line and column.
+The JSON output contains `parse_tree` (including terminals and punctuation)
+and `ast` (the simplified semantic structure). Invalid syntax raises a
+`ParseError` and the command-line interface reports the source position.
 
 #### Python API
 

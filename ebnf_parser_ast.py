@@ -165,14 +165,21 @@ class Parser:
     def current(self) -> Token:
         return self.tokens[self.index]
 
+    @property
+    def previous(self) -> Token:
+        return self.tokens[self.index - 1]
+
     def advance(self) -> Token:
         token = self.current
         if token.kind != "EOF":
             self.index += 1
         return token
 
-    def check(self, value: str) -> bool:
-        return self.current.value == value
+    def peek(self, offset: int = 1) -> Token:
+        index = self.index + offset
+        if index >= len(self.tokens):
+            return self.tokens[-1]
+        return self.tokens[index]
 
     def match(self, *values: str) -> bool:
         if self.current.value in values:
@@ -181,13 +188,13 @@ class Parser:
         return False
 
     def expect(self, value: str) -> Token:
-        if not self.check(value):
-            self.error(f"Expected {value!r}, found {self.current.value or 'end of input'!r}")
+        if self.current.value != value:
+            raise ParseError(f"Expected {value!r}, found {self.current.value or 'end of input'} at position {self.current.position}")
         return self.advance()
 
     def expect_kind(self, kind: str) -> Token:
         if self.current.kind != kind:
-            self.error(f"Expected {kind}, found {self.current.value or 'end of input'!r}")
+            raise ParseError(f"Expected {kind}, found {self.current.value or 'end of input'} at position {self.current.position}")
         return self.advance()
 
     def error(self, message: str) -> NoReturn:
@@ -205,9 +212,13 @@ class Parser:
         return {"rule": "Program", "children": children}
 
     def statement_cst(self) -> dict[str, Any]:
-        if self.current.value in {"let", "const", "var"}:
-            return self.var_decl_cst()
-        if self.check("if"):
+        if self.current.kind == "NEWLINE":
+            self.advance()
+            return self.statement_cst()
+        if self.current.kind == "INDENT":
+            self.advance()
+            return self.statement_cst()
+        if self.current.kind == "KEYWORD" and self.current.value == "if":
             return self.if_cst()
         if self.current.kind == "IDENTIFIER":
             return self.assignment_cst()
@@ -222,11 +233,16 @@ class Parser:
         return {"rule": "VarDecl", "children": [keyword, name, equals, expression, semicolon]}
 
     def assignment_cst(self) -> dict[str, Any]:
-        name = self.leaf(self.expect_kind("IDENTIFIER"))
-        equals = self.leaf(self.expect("="))
-        expression = self.expression_cst()
-        semicolon = self.leaf(self.expect(";"))
-        return {"rule": "Assignment", "children": [name, equals, expression, semicolon]}
+        target = self.leaf(self.expect_kind("IDENTIFIER"))
+        operation = self.current.value
+        if operation in {"=", "+=", "-=", "*=", "/=", "%="}:
+            operator = self.leaf(self.advance())
+        else:
+            raise ParseError(f"Unsupported assignment operator {self.current.value!r}")
+        value = self.expression_cst()
+        if self.current.kind == "NEWLINE":
+            self.advance()
+        return {"rule": "Assignment", "children": [target, operator, value]}
 
     def if_cst(self) -> dict[str, Any]:
         children = [self.leaf(self.expect("if")), self.leaf(self.expect("("))]
@@ -359,7 +375,9 @@ def main() -> None:
     if not source.strip():
         parser.error("No source was provided")
     try:
-        print(json.dumps(parse_source(source), indent=2))
+        if args.ebnf:
+            print(GRAMMAR)
+        print(json.dumps(parse_source(source), indent=2, ensure_ascii=False))
     except ParseError as error:
         parser.error(str(error))
 
