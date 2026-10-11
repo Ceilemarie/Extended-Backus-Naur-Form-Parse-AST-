@@ -214,6 +214,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const astTitle = document.getElementById("astTitle");
   const parseTreeOutput = document.getElementById("parseTreeOutput");
   const astOutput = document.getElementById("astOutput");
+  const ebnfOutput = document.getElementById("ebnfOutput");
   const jsonTreeOutput = document.getElementById("jsonTreeOutput");
   const mermaidSelection = document.getElementById("mermaidSelection");
   const mermaidZoomIn = document.getElementById("mermaidZoomIn");
@@ -230,6 +231,24 @@ window.addEventListener("DOMContentLoaded", () => {
   ]);
   const OPERATORS = ["**", "//", "->", ":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=", "=>", "+", "-", "*", "/", "%", "=", "<", ">", "|", "&", "^", "~"];
   const DELIMITERS = new Set(["(", ")", "[", "]", "{", "}", ",", ":", ".", ";"]);
+  const EBNF_GRAMMAR = `Program = { Statement } ;
+Statement = Assignment | IfStmt | WhileStmt | ReturnStmt | ExprStmt ;
+Assignment = Identifier, "=", Expression, NEWLINE ;
+IfStmt = "if", Expression, ":", Suite,
+         { "elif", Expression, ":", Suite },
+         [ "else", ":", Suite ] ;
+WhileStmt = "while", Expression, ":", Suite ;
+ReturnStmt = "return", [ Expression ], NEWLINE ;
+ExprStmt = Expression, NEWLINE ;
+Suite = NEWLINE, INDENT, { Statement }, DEDENT ;
+Expression = OrExpr ;
+OrExpr = AndExpr, { "or", AndExpr } ;
+AndExpr = CompareExpr, { "and", CompareExpr } ;
+CompareExpr = AddExpr, [ CompOp, AddExpr ] ;
+AddExpr = MulExpr, { ("+" | "-"), MulExpr } ;
+MulExpr = UnaryExpr, { ("*" | "/" | "%" | "//"), UnaryExpr } ;
+UnaryExpr = [ ("+" | "-") ], Primary ;
+Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expression, ")" ;`;
 
   function tokenize(code) {
     const tokens = [];
@@ -358,6 +377,12 @@ window.addEventListener("DOMContentLoaded", () => {
     return node;
   }
 
+  function renderEbnf() {
+    if (!ebnfOutput) return;
+    ebnfOutput.classList.add("tree-output");
+    ebnfOutput.innerHTML = `<pre class="ebnf-block">${escapeHtml(EBNF_GRAMMAR)}</pre>`;
+  }
+
   function renderJsonTree(code) {
     jsonTreeOutput.classList.remove("tree-output", "tree-error");
     jsonTreeOutput.innerHTML = "";
@@ -481,6 +506,55 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function parseSource(code, tokens) {
+    return parsePythonSource(code, tokens);
+  }
+
+  function parsePythonSource(code, tokens) {
+    const lines = code.replace(/\r\n?/g, "\n").split("\n");
+    const meaningful = lines
+      .map((text, index) => ({ text, index: index + 1, indent: text.match(/^[ \t]*/)[0].replace(/\t/g, "    ").length }))
+      .filter((line) => line.text.trim() && !line.text.trim().startsWith("#"));
+    const expressionAst = (source) => {
+      const value = source.trim();
+      if (/^(True|False|None)$/.test(value)) return { type: "Constant", value: value === "True" ? true : value === "False" ? false : null };
+      if (/^(['"]).*\1$/.test(value)) return { type: "Constant", value: value.slice(1, -1) };
+      if (/^-?\d+(?:\.\d+)?$/.test(value)) return { type: "Constant", value: Number(value) };
+      const call = value.match(/^([A-Za-z_]\w*)\((.*)\)$/);
+      if (call) return { type: "Call", function: { type: "Name", id: call[1] }, arguments: call[2] ? call[2].split(",").map(expressionAst) : [] };
+      const binary = value.match(/^(.+?)\s(==|!=|<=|>=|<|>|\+|-|\*|\/|%|and|or)\s(.+)$/);
+      if (binary) return { type: "BinOp", operator: binary[2], left: expressionAst(binary[1]), right: expressionAst(binary[3]) };
+      return { type: "Name", id: value };
+    };
+    const astForLine = (source) => {
+      const text = source.trim();
+      let match = text.match(/^def\s+([A-Za-z_]\w*)\s*\((.*?)\)\s*:/);
+      if (match) return { type: "FunctionDef", name: match[1], arguments: match[2] ? match[2].split(",").map((name) => name.trim()).filter(Boolean) : [] };
+      match = text.match(/^(if|elif|while)\s+(.+):$/);
+      if (match) return { type: match[1] === "if" ? "If" : match[1] === "elif" ? "Elif" : "While", test: expressionAst(match[2]), body: [] };
+      match = text.match(/^for\s+([A-Za-z_]\w*)\s+in\s+(.+):$/);
+      if (match) return { type: "For", target: { type: "Name", id: match[1] }, iterable: expressionAst(match[2]), body: [] };
+      match = text.match(/^return(?:\s+(.+))?$/);
+      if (match) return { type: "Return", value: match[1] ? expressionAst(match[1]) : null };
+      match = text.match(/^([A-Za-z_]\w*)\s*([+\-*\/%]?=)\s*(.+)$/);
+      if (match) return { type: "Assign", target: { type: "Name", id: match[1] }, operator: match[2], value: expressionAst(match[3]) };
+      return { type: "Expr", value: expressionAst(text) };
+    };
+    const cst = {
+      rule: "PythonModule",
+      children: meaningful.map((line) => ({
+        rule: "PythonStatement",
+        line: line.index,
+        indent: line.indent,
+        children: tokenize(line.text).filter((token) => !["Indent", "Dedent", "Newline"].includes(token.type)).map((token) => ({ terminal: token.lexeme, kind: token.type })),
+      })),
+    };
+    const ast = { type: "Module", body: meaningful.map((line) => astForLine(line.text)) };
+    const invalid = tokens.find((token) => token.type === "Unknown");
+    if (invalid) throw new Error(`Unsupported Python character "${invalid.lexeme}"`);
+    return { parseTree: cst, ast };
+  }
+
+  function parsePythonSourceOld(code, tokens) {
     const parserTokens = tokens.map((token) => ({
       value: token.lexeme,
       kind: token.type,
@@ -488,6 +562,11 @@ window.addEventListener("DOMContentLoaded", () => {
     parserTokens.push({ value: "", kind: "EOF" });
     let index = 0;
     const current = () => parserTokens[index];
+    const skipSeparators = () => {
+      while (["Newline", "Indent", "Dedent"].includes(current().kind)) {
+        index += 1;
+      }
+    };
     const leaf = (token) => ({ terminal: token.value, kind: token.kind });
     const error = (message) => {
       throw new Error(`${message} near ${current().value || "end of input"}`);
@@ -520,7 +599,7 @@ window.addEventListener("DOMContentLoaded", () => {
         const expression = expressionCst();
         return { rule: "Grouping", children: [leaf(opening), expression, leaf(expect(")"))] };
       }
-      if (current().kind === "IntLiteral") {
+      if (current().kind === "NumberLiteral" || current().kind === "IntLiteral") {
         return { rule: "IntLiteral", children: [leaf(parserTokens[index++])] };
       }
       if (current().value === "true" || current().value === "false") {
@@ -577,7 +656,12 @@ window.addEventListener("DOMContentLoaded", () => {
       error("Expected a statement");
     };
     const cst = { rule: "Program", children: [] };
-    while (current().kind !== "EOF") cst.children.push(statement());
+    while (current().kind !== "EOF") {
+      skipSeparators();
+      if (current().kind === "EOF") break;
+      cst.children.push(statement());
+      skipSeparators();
+    }
     const astExpression = (node) => {
       if (["Equality", "Comparison", "Term", "Factor"].includes(node.rule)) {
         let result = astExpression(node.children[0]);
@@ -650,6 +734,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderTrees(code, tokens) {
+    renderEbnf();
     parseTreeOutput.classList.remove("tree-output", "tree-error");
     astOutput.classList.remove("tree-output", "tree-error");
     if (!code.trim()) {
@@ -660,7 +745,7 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
     try {
-      const result = parsePythonSource(code, tokens);
+      const result = parseSource(code, tokens);
       parseTreeOutput.classList.add("tree-output");
       astOutput.classList.add("tree-output");
       parseTreeOutput.innerHTML = `<pre>${escapeHtml(JSON.stringify(result.parseTree, null, 2))}</pre>`;
@@ -674,7 +759,7 @@ window.addEventListener("DOMContentLoaded", () => {
       astOutput.innerHTML = message;
       jsonTreeOutput.classList.remove("tree-output");
       jsonTreeOutput.classList.add("tree-error");
-      jsonTreeOutput.innerHTML = "<p>AST JSON tree unavailable until the Python input parses successfully.</p>";
+      jsonTreeOutput.innerHTML = "<p>AST JSON tree unavailable until the input parses successfully.</p>";
     }
   }
 
@@ -702,12 +787,12 @@ window.addEventListener("DOMContentLoaded", () => {
   sourceFile.addEventListener("change", () => {
     const file = sourceFile.files[0];
     if (!file) return;
-    const isPythonFile = file.name.toLowerCase().endsWith(".py");
-    if (!isPythonFile) {
+    const isSupportedTextFile = /\.(txt|py|js|ebnf|grammar)$/i.test(file.name);
+    if (!isSupportedTextFile) {
       sourceFile.value = "";
       renderTrees("", []);
-      parseTreeOutput.innerHTML = "<p>Only Python .py files are supported.</p>";
-      astOutput.innerHTML = "<p>Choose a .py file and try again.</p>";
+      parseTreeOutput.innerHTML = "<p>Only text-based source files are supported.</p>";
+      astOutput.innerHTML = "<p>Choose a .txt, .js, .ebnf, .grammar or .py file and try again.</p>";
       return;
     }
     const reader = new FileReader();
@@ -722,7 +807,16 @@ window.addEventListener("DOMContentLoaded", () => {
     reader.readAsText(file);
   });
 
-  presetBtns.forEach((btn) => {
+  const grammarExamples = [
+    "total = 10 + 5\nprint(total)",
+    "if score >= 75:\n    passed = True\nelse:\n    passed = False",
+    "count = 0\nwhile count < 3:\n    count = count + 1",
+  ];
+
+  presetBtns.forEach((btn, index) => {
+    if (grammarExamples[index]) {
+      btn.setAttribute("data-code", grammarExamples[index]);
+    }
     btn.addEventListener("click", () => {
       codeInput.value = btn.getAttribute("data-code");
       runLexer();

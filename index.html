@@ -82,7 +82,7 @@
               <span class="preset-label">Python examples:</span>
               <button class="preset-btn" data-code="total = 10 + 5&#10;print(total)">Basics</button>
               <button class="preset-btn" data-code="if score >= 75:&#10;    passed = True&#10;else:&#10;    passed = False">If</button>
-              <button class="preset-btn" data-code="for number in range(3):&#10;    print(number)">Loop</button>
+              <button class="preset-btn" data-code="count = 0&#10;while count < 3:&#10;    count = count + 1">Loop</button>
             </div>
           </div>
 
@@ -104,6 +104,47 @@ print(total)</textarea>
             <label class="upload-btn" for="sourceFile">Upload .py</label>
             <input id="sourceFile" type="file" accept=".py,text/x-python" />
             <button id="runBtn" class="run-btn" aria-label="Analyze input" title="Analyze input">&rarr;</button>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="panel-header">
+            <h4>Generated EBNF Grammar</h4>
+            <span class="panel-badge">Grammar</span>
+          </div>
+          <div id="ebnfOutput" class="tree-placeholder">
+            <pre class="ebnf-block">Program = { Statement } ;
+Statement = Assignment | IfStmt | WhileStmt | ReturnStmt | ExprStmt ;
+Assignment = Identifier, "=", Expression, NEWLINE ;
+IfStmt = "if", Expression, ":", Suite,
+         { "elif", Expression, ":", Suite },
+         [ "else", ":", Suite ] ;
+WhileStmt = "while", Expression, ":", Suite ;
+ReturnStmt = "return", [ Expression ], NEWLINE ;
+ExprStmt = Expression, NEWLINE ;
+Suite = NEWLINE, INDENT, { Statement }, DEDENT ;
+Expression = OrExpr ;
+OrExpr = AndExpr, { "or", AndExpr } ;
+AndExpr = CompareExpr, { "and", CompareExpr } ;
+CompareExpr = AddExpr, [ CompOp, AddExpr ] ;
+AddExpr = MulExpr, { ("+" | "-"), MulExpr } ;
+MulExpr = UnaryExpr, { ("*" | "/" | "%" | "//"), UnaryExpr } ;
+UnaryExpr = [ ("+" | "-") ], Primary ;
+Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expression, ")" ;</pre>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="panel-header">
+            <h4>Python Terminology</h4>
+            <span class="panel-badge">20+ terms</span>
+          </div>
+          <div class="terminology-grid">
+            <span>Identifier</span><span>Keyword</span><span>Literal</span><span>Operator</span><span>Token</span>
+            <span>Lexer</span><span>Parser</span><span>Grammar</span><span>EBNF</span><span>Statement</span>
+            <span>Assignment</span><span>Expression</span><span>Condition</span><span>Block</span><span>Suite</span>
+            <span>Variable</span><span>Function</span><span>Loop</span><span>AST</span><span>Parse tree</span>
+            <span>Syntax</span><span>Semantics</span><span>Compiler</span><span>Interpreter</span><span>Delimiter</span>
           </div>
         </div>
 

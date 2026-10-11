@@ -1,47 +1,42 @@
-"""A Python parser and AST demo.
+"""Python-focused EBNF parser and AST demo.
 
-The module implements a subset of Python syntax:
+The module implements a small but meaningful subset of the Python language:
 
-    Program        = { Statement } ;
-    Statement      = SimpleStmt | CompoundStmt ;
-    SimpleStmt     = Assignment | ExprStmt | PassStmt | BreakStmt | ContinueStmt | ReturnStmt ;
-    CompoundStmt   = IfStmt | WhileStmt | ForStmt | FunctionDef | ClassDef | TryStmt ;
-    Assignment     = (Identifier | TupleTarget) "=" Expression ;
-    Expression     = Lambda | IfExpr | OrTest ;
-    OrTest         = AndTest { "or" AndTest } ;
-    AndTest        = NotTest { "and" NotTest } ;
-    NotTest        = "not" NotTest | Comparison ;
-    Comparison     = Expr { CompOp Expr } ;
-    CompOp         = "<" | ">" | "==" | ">=" | "<=" | "!=" | "in" | "not in" | "is" | "is not" ;
-    Expr           = Term { ("+" | "-") Term } ;
-    Term           = Factor { ("*" | "/" | "//" | "%" | "@") Factor } ;
-    Factor         = ("+" | "-" | "~") Factor | Power ;
-    Power          = Primary { "**" Factor } ;
-    Primary        = Literal | Identifier | "(" Expression ")" | "[" [ExpressionList] "]" | "{" [DictItems] "}" | Primary "." Identifier | Primary "(" [ArgList] ")" | Primary "[" Expression "]" ;
-    Literal        = String | Number | "True" | "False" | "None" ;
-    IfStmt         = "if" Expression ":" Suite { "elif" Expression ":" Suite } ["else" ":" Suite] ;
-    WhileStmt      = "while" Expression ":" Suite ["else" ":" Suite] ;
-    ForStmt        = "for" TargetList "in" Expression ":" Suite ["else" ":" Suite] ;
-    FunctionDef    = "def" Identifier "(" [Parameters] ")" ["->" Expression] ":" Suite ;
-    ClassDef       = "class" Identifier ["(" [ArgList] ")"] ":" Suite ;
-    TryStmt        = "try" ":" Suite { ExceptClause } ["else" ":" Suite] ["finally" ":" Suite] ;
-    Suite          = SimpleStmt { ";" SimpleStmt } [";"] NEWLINE INDENT { Statement } DEDENT ;
+    Program      = { Statement } ;
+    Statement    = Assignment | IfStmt | WhileStmt | ReturnStmt | ExprStmt ;
+    Assignment   = Identifier, "=", Expression, NEWLINE ;
+    IfStmt       = "if", Expression, ":", Suite,
+                   { "elif", Expression, ":", Suite },
+                   [ "else", ":", Suite ] ;
+    WhileStmt    = "while", Expression, ":", Suite ;
+    ReturnStmt   = "return", [ Expression ], NEWLINE ;
+    ExprStmt     = Expression, NEWLINE ;
+    Suite        = NEWLINE, INDENT, { Statement }, DEDENT ;
+    Expression   = OrExpr ;
+    OrExpr       = AndExpr, { "or", AndExpr } ;
+    AndExpr      = CompareExpr, { "and", CompareExpr } ;
+    CompareExpr  = AddExpr, [ CompOp, AddExpr ] ;
+    AddExpr      = MulExpr, { ("+" | "-"), MulExpr } ;
+    MulExpr      = UnaryExpr, { ("*" | "/" | "%" | "//"), UnaryExpr } ;
+    UnaryExpr    = [ ("+" | "-") ], Primary ;
+    Primary      = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expression, ")" ;
 
-It is deliberately self-contained so it can be uploaded as one Python file.
-The public ``parse_source`` function returns both a concrete parse tree and an
-abstract syntax tree.
+The parser accepts Python-style assignment, arithmetic, booleans, and if/else
+blocks while staying intentionally compact for teaching and demonstration.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields, is_dataclass
+import argparse
 import json
 import re
-from typing import Any, Iterable, NoReturn
+import sys
+from dataclasses import dataclass
+from typing import Any, Iterable
 
 
 class ParseError(ValueError):
-    """Raised when source text does not conform to the Python grammar."""
+    """Raised when source text does not conform to the supported Python subset."""
 
 
 @dataclass(frozen=True)
@@ -49,220 +44,144 @@ class Token:
     kind: str
     value: str
     position: int
-    line: int
-    column: int
+    line: int = 0
+    column: int = 0
 
 
-@dataclass(frozen=True)
-class Program:
-    statements: list[Any]
+PYTHON_KEYWORDS = {
+    "and",
+    "elif",
+    "else",
+    "False",
+    "if",
+    "in",
+    "is",
+    "not",
+    "None",
+    "or",
+    "return",
+    "True",
+    "while",
+    "break",
+    "continue",
+    "pass",
+    "def",
+    "for",
+    "class",
+    "lambda",
+}
 
+COMPARISON_OPS = {"<", ">", "<=", ">=", "==", "!=", "in", "not in", "is", "is not"}
 
-@dataclass(frozen=True)
-class Assignment:
-    targets: list[Any]
-    value: Any
-
-
-@dataclass(frozen=True)
-class ExprStatement:
-    expression: Any
-
-
-@dataclass(frozen=True)
-class PassStatement:
-    pass
-
-
-@dataclass(frozen=True)
-class BreakStatement:
-    pass
-
-
-@dataclass(frozen=True)
-class ContinueStatement:
-    pass
-
-
-@dataclass(frozen=True)
-class ReturnStatement:
-    value: Any | None
-
-
-@dataclass(frozen=True)
-class IfStatement:
-    condition: Any
-    then_branch: list[Any]
-    elif_branches: list[tuple[Any, list[Any]]]
-    else_branch: list[Any] | None
-
-
-@dataclass(frozen=True)
-class WhileStatement:
-    condition: Any
-    body: list[Any]
-    else_branch: list[Any] | None
-
-
-@dataclass(frozen=True)
-class ForStatement:
-    target: Any
-    iterable: Any
-    body: list[Any]
-    else_branch: list[Any] | None
-
-
-@dataclass(frozen=True)
-class FunctionDef:
-    name: str
-    params: list[Any]
-    returns: Any | None
-    body: list[Any]
-
-
-@dataclass(frozen=True)
-class ClassDef:
-    name: str
-    bases: list[Any]
-    body: list[Any]
-
-
-@dataclass(frozen=True)
-class TryStatement:
-    body: list[Any]
-    except_clauses: list[tuple[Any | None, Any | None, list[Any]]]
-    else_branch: list[Any] | None
-    finally_branch: list[Any] | None
-
-
-@dataclass(frozen=True)
-class BinaryExpression:
-    operator: str
-    left: Any
-    right: Any
-
-
-@dataclass(frozen=True)
-class UnaryExpression:
-    operator: str
-    operand: Any
-
-
-@dataclass(frozen=True)
-class Literal:
-    value: Any
-
-
-@dataclass(frozen=True)
-class Identifier:
-    name: str
-
-
-@dataclass(frozen=True)
-class Call:
-    func: Any
-    args: list[Any]
-    keywords: list[tuple[str | None, Any]]
-
-
-@dataclass(frozen=True)
-class Attribute:
-    value: Any
-    attr: str
-
-
-@dataclass(frozen=True)
-class Subscript:
-    value: Any
-    slice: Any
-
-
-@dataclass(frozen=True)
-class ListExpr:
-    elements: list[Any]
-
-
-@dataclass(frozen=True)
-class DictExpr:
-    items: list[tuple[Any, Any]]
-
-
-@dataclass(frozen=True)
-class TupleExpr:
-    elements: list[Any]
-
-
-@dataclass(frozen=True)
-class LambdaExpr:
-    params: list[Any]
-    body: Any
-
-
-@dataclass(frozen=True)
-class IfExpression:
-    test: Any
-    body: Any
-    orelse: Any
-
-
-@dataclass(frozen=True)
-class Compare:
-    left: Any
-    ops: list[tuple[str, Any]]
-
+GRAMMAR = '''Program = { Statement } ;
+Statement = Assignment | IfStmt | WhileStmt | ReturnStmt | ExprStmt ;
+Assignment = Identifier, "=", Expression, NEWLINE ;
+IfStmt = "if", Expression, ":", Suite,
+         { "elif", Expression, ":", Suite },
+         [ "else", ":", Suite ] ;
+WhileStmt = "while", Expression, ":", Suite ;
+ReturnStmt = "return", [ Expression ], NEWLINE ;
+ExprStmt = Expression, NEWLINE ;
+Suite = NEWLINE, INDENT, { Statement }, DEDENT ;
+Expression = OrExpr ;
+OrExpr = AndExpr, { "or", AndExpr } ;
+AndExpr = CompareExpr, { "and", CompareExpr } ;
+CompareExpr = AddExpr, [ CompOp, AddExpr ] ;
+AddExpr = MulExpr, { ("+" | "-"), MulExpr } ;
+MulExpr = UnaryExpr, { ("*" | "/" | "%" | "//"), UnaryExpr } ;
+UnaryExpr = [ ("+" | "-") ], Primary ;
+Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expression, ")" ;'''
 
 TOKEN_RE = re.compile(
     r"""
-    (?P<WHITESPACE>[ \t\f]+)
-  | (?P<NEWLINE>\n)
-  | (?P<COMMENT>#[^\n]*)
-  | (?P<STRING>\"\"\"[\s\S]*?\"\"\"|\'\'\'[\s\S]*?\'\'\'|\"[^\n\"]*\"|\'[^\n\']*\')
-  | (?P<NUMBER>\d+\.\d*|\.\d+|\d+[eE][+-]?\d+|\d+\.\d*[eE][+-]?\d+|\d+)
-  | (?P<ELLIPSIS>\.\.\.)
-  | (?P<OP>\+=|-=|\*=|/=|//=|%=|@=|\*\*=|\|=|&=|\^=|>>=|<<=|\*\*|//|<<|>>|<=|>=|==|!=|[+\-*/%@<>=&|^~:.,;@])
+    (?P<WS>[ \t]+)
+  | (?P<NUMBER>\d+\.\d+|\d+)
+  | (?P<STRING>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')
+  | (?P<OP>\*\*|//|<=|>=|==|!=|:=|[()+\-*/%<>=,:.])
+  | (?P<KEYWORD>if|elif|else|while|for|in|return|and|or|not|True|False|None|pass|break|continue|class|def|lambda)\b
   | (?P<IDENTIFIER>[A-Za-z_][A-Za-z0-9_]*)
-  | (?P<INDENT>INDENT)
-  | (?P<DEDENT>DEDENT)
+  | (?P<INVALID>.)
     """,
     re.VERBOSE,
 )
 
-PYTHON_KEYWORDS = {
-    "False", "None", "True", "and", "as", "assert", "async", "await",
-    "break", "class", "continue", "def", "del", "elif", "else", "except",
-    "finally", "for", "from", "global", "if", "import", "in", "is",
-    "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try",
-    "while", "with", "yield", "match", "case", "type"
-}
-
-SOFT_KEYWORDS = {"_", "match", "case", "type"}
-
-COMPARISON_OPS = {"<", ">", "<=", ">=", "==", "!=", "in", "not in", "is", "is not"}
-
 
 def tokenize(source: str) -> list[Token]:
-    """Convert source text into tokens and reject unknown characters."""
+    """Convert Python source into a stream of tokens with indentation tracking."""
     tokens: list[Token] = []
-    position = 0
-    while position < len(source):
-        match = TOKEN_RE.match(source, position)
-        if match is None:
-            raise ParseError(f"Unexpected character {source[position]!r} at {position}")
+    lines = source.splitlines(True)
+    indent_stack = [0]
+    absolute_position = 0
 
-        kind = match.lastgroup
-        value = match.group()
-        if kind not in {"WHITESPACE", "COMMENT"}:
-            if kind == "IDENTIFIER" and value in KEYWORDS:
-                kind = "KEYWORD"
-            tokens.append(Token(kind, value, position))
-        position = match.end()
+    for line_number, raw_line in enumerate(lines, start=1):
+        if raw_line.endswith("\r\n"):
+            line = raw_line[:-2]
+        elif raw_line.endswith("\n") or raw_line.endswith("\r"):
+            line = raw_line[:-1]
+        else:
+            line = raw_line
 
-    tokens.append(Token("EOF", "", len(source)))
+        if not line.strip() or line.lstrip().startswith("#"):
+            absolute_position += len(raw_line)
+            continue
+
+        leading = len(line) - len(line.lstrip(" \t"))
+        while leading < indent_stack[-1]:
+            indent_stack.pop()
+            tokens.append(Token("DEDENT", "", absolute_position, line_number, leading))
+
+        if leading > indent_stack[-1]:
+            indent_stack.append(leading)
+            tokens.append(Token("INDENT", "", absolute_position, line_number, leading))
+
+        if leading != indent_stack[-1]:
+            raise ParseError(f"Inconsistent indentation on line {line_number}")
+
+        cursor = 0
+        while cursor < len(line):
+            remainder = line[cursor:]
+            if remainder.startswith("#"):
+                break
+            if remainder[0].isspace():
+                cursor += 1
+                continue
+            match = TOKEN_RE.match(remainder)
+            if match is None:
+                raise ParseError(f"Unexpected character {remainder[0]!r} at line {line_number}, column {cursor + 1}")
+            kind = match.lastgroup
+            value = match.group(0)
+            if kind == "WS":
+                cursor += len(value)
+                continue
+            token_kind = kind
+            if token_kind == "KEYWORD" and value in PYTHON_KEYWORDS:
+                token_kind = "KEYWORD"
+            elif token_kind == "IDENTIFIER":
+                token_kind = "IDENTIFIER"
+            elif token_kind == "NUMBER":
+                token_kind = "NUMBER"
+            elif token_kind == "STRING":
+                token_kind = "STRING"
+            elif token_kind == "OP":
+                token_kind = "OP"
+            if token_kind == "INVALID":
+                raise ParseError(f"Unexpected token {value!r} at line {line_number}, column {cursor + 1}")
+            tokens.append(Token(token_kind, value, absolute_position + cursor, line_number, cursor + 1))
+            cursor += len(value)
+
+        tokens.append(Token("NEWLINE", "\n", absolute_position + len(line), line_number, len(line) + 1))
+        absolute_position += len(raw_line)
+
+    while len(indent_stack) > 1:
+        indent_stack.pop()
+        tokens.append(Token("DEDENT", "", absolute_position, len(lines), 0))
+
+    tokens.append(Token("EOF", "", absolute_position, len(lines) + 1, 0))
     return tokens
 
 
 class Parser:
-    """Recursive-descent parser with standard operator precedence."""
+    """Small recursive-descent parser for the supported Python subset."""
 
     def __init__(self, tokens: Iterable[Token]):
         self.tokens = list(tokens)
@@ -272,14 +191,21 @@ class Parser:
     def current(self) -> Token:
         return self.tokens[self.index]
 
+    @property
+    def previous(self) -> Token:
+        return self.tokens[self.index - 1]
+
     def advance(self) -> Token:
         token = self.current
         if token.kind != "EOF":
             self.index += 1
         return token
 
-    def check(self, value: str) -> bool:
-        return self.current.value == value
+    def peek(self, offset: int = 1) -> Token:
+        index = self.index + offset
+        if index >= len(self.tokens):
+            return self.tokens[-1]
+        return self.tokens[index]
 
     def match(self, *values: str) -> bool:
         if self.current.value in values:
@@ -288,201 +214,284 @@ class Parser:
         return False
 
     def expect(self, value: str) -> Token:
-        if not self.check(value):
-            self.error(f"Expected {value!r}, found {self.current.value or 'end of input'!r}")
+        if self.current.value != value:
+            raise ParseError(f"Expected {value!r}, found {self.current.value or 'end of input'} at position {self.current.position}")
         return self.advance()
 
     def expect_kind(self, kind: str) -> Token:
         if self.current.kind != kind:
-            self.error(f"Expected {kind}, found {self.current.value or 'end of input'!r}")
+            raise ParseError(f"Expected {kind}, found {self.current.value or 'end of input'} at position {self.current.position}")
         return self.advance()
 
-    def error(self, message: str) -> NoReturn:
-        raise ParseError(f"{message} at position {self.current.position}")
-
-    def parse(self) -> tuple[Program, dict[str, Any]]:
-        """Return an AST and a concrete parse tree for the complete program."""
-        cst = self.program_cst()
-        if self.current.kind != "EOF":
-            self.error(f"Unexpected token {self.current.value!r}")
-        return self.ast_from_program_cst(cst), cst
-
-    def program_cst(self) -> dict[str, Any]:
-        children = []
-        while self.current.kind != "EOF":
-            children.append(self.statement_cst())
-        return {"rule": "Program", "children": children}
+    def parse(self) -> tuple[dict[str, Any], dict[str, Any]]:
+        program = {"rule": "Program", "children": []}
+        while self.current.kind not in {"EOF", "DEDENT"}:
+            if self.current.kind == "NEWLINE":
+                self.advance()
+                continue
+            program["children"].append(self.statement_cst())
+        return program, self.ast_from_node(program)
 
     def statement_cst(self) -> dict[str, Any]:
-        if self.current.value in {"let", "const", "var"}:
-            return self.var_decl_cst()
-        if self.check("if"):
+        if self.current.kind == "NEWLINE":
+            self.advance()
+            return self.statement_cst()
+        if self.current.kind == "INDENT":
+            self.advance()
+            return self.statement_cst()
+        if self.current.kind == "KEYWORD" and self.current.value == "if":
             return self.if_cst()
-        if self.check("while"):
+        if self.current.kind == "KEYWORD" and self.current.value == "while":
             return self.while_cst()
-        if self.current.kind == "IDENTIFIER":
+        if self.current.kind == "KEYWORD" and self.current.value == "return":
+            return self.return_cst()
+        if self.current.kind == "IDENTIFIER" and self.peek().value in {"=", "+=", "-=", "*=", "/=", "%="}:
             return self.assignment_cst()
-        self.error(f"Expected a statement, found {self.current.value!r}")
-
-    def var_decl_cst(self) -> dict[str, Any]:
-        keyword = self.leaf(self.advance())
-        name = self.leaf(self.expect_kind("IDENTIFIER"))
-        equals = self.leaf(self.expect("="))
-        expression = self.expression_cst()
-        semicolon = self.leaf(self.expect(";"))
-        return {"rule": "VarDecl", "children": [keyword, name, equals, expression, semicolon]}
+        return self.expr_stmt_cst()
 
     def assignment_cst(self) -> dict[str, Any]:
-        name = self.leaf(self.expect_kind("IDENTIFIER"))
-        equals = self.leaf(self.expect("="))
-        expression = self.expression_cst()
-        semicolon = self.leaf(self.expect(";"))
-        return {"rule": "Assignment", "children": [name, equals, expression, semicolon]}
+        target = self.leaf(self.expect_kind("IDENTIFIER"))
+        operation = self.current.value
+        if operation in {"=", "+=", "-=", "*=", "/=", "%="}:
+            operator = self.leaf(self.advance())
+        else:
+            raise ParseError(f"Unsupported assignment operator {self.current.value!r}")
+        value = self.expression_cst()
+        if self.current.kind == "NEWLINE":
+            self.advance()
+        return {"rule": "Assignment", "children": [target, operator, value]}
 
     def if_cst(self) -> dict[str, Any]:
-        children = [self.leaf(self.expect("if")), self.leaf(self.expect("("))]
-        children.append(self.expression_cst())
-        children.extend([self.leaf(self.expect(")")), self.block_cst()])
-        if self.match("else"):
-            children.extend([self.leaf(self.tokens[self.index - 1]), self.block_cst()])
+        keyword = self.leaf(self.expect("if"))
+        test = self.expression_cst()
+        self.expect(":")
+        body = self.block_cst()
+        elif_branches = []
+        while self.current.kind == "KEYWORD" and self.current.value == "elif":
+            elif_kw = self.leaf(self.advance())
+            elif_test = self.expression_cst()
+            self.expect(":")
+            elif_body = self.block_cst()
+            elif_branches.append({"rule": "ElifClause", "children": [elif_kw, elif_test, elif_body]})
+        else_body = None
+        if self.current.kind == "KEYWORD" and self.current.value == "else":
+            else_kw = self.leaf(self.advance())
+            self.expect(":")
+            else_body = self.block_cst()
+            else_body = {"rule": "ElseClause", "children": [else_kw, else_body]}
+        children = [keyword, test, body]
+        children.extend(elif_branches)
+        if else_body is not None:
+            children.append(else_body)
         return {"rule": "IfStmt", "children": children}
 
     def while_cst(self) -> dict[str, Any]:
-        children = [self.leaf(self.expect("while")), self.leaf(self.expect("("))]
-        children.extend([self.expression_cst(), self.leaf(self.expect(")")), self.block_cst()])
-        return {"rule": "WhileStmt", "children": children}
+        keyword = self.leaf(self.expect("while"))
+        test = self.expression_cst()
+        self.expect(":")
+        body = self.block_cst()
+        return {"rule": "WhileStmt", "children": [keyword, test, body]}
+
+    def return_cst(self) -> dict[str, Any]:
+        keyword = self.leaf(self.expect("return"))
+        value = None
+        if self.current.kind not in {"NEWLINE", "EOF", "DEDENT"}:
+            value = self.expression_cst()
+        if self.current.kind == "NEWLINE":
+            self.advance()
+        return {"rule": "ReturnStmt", "children": [keyword, value] if value is not None else [keyword]}
+
+    def expr_stmt_cst(self) -> dict[str, Any]:
+        expression = self.expression_cst()
+        if self.current.kind == "NEWLINE":
+            self.advance()
+        return {"rule": "ExprStmt", "children": [expression]}
 
     def block_cst(self) -> dict[str, Any]:
-        children = [self.leaf(self.expect("{"))]
-        while not self.check("}") and self.current.kind != "EOF":
-            children.append(self.statement_cst())
-        children.append(self.leaf(self.expect("}")))
-        return {"rule": "Block", "children": children}
+        if self.current.kind == "NEWLINE":
+            self.advance()
+        if self.current.kind == "INDENT":
+            self.advance()
+            statements: list[dict[str, Any]] = []
+            while self.current.kind not in {"DEDENT", "EOF"}:
+                if self.current.kind == "NEWLINE":
+                    self.advance()
+                    continue
+                statements.append(self.statement_cst())
+            if self.current.kind == "DEDENT":
+                self.advance()
+            return {"rule": "Block", "children": statements}
+        statement = self.statement_cst()
+        return {"rule": "Block", "children": [statement]}
 
     def expression_cst(self) -> dict[str, Any]:
-        return self.binary_cst(self.equality_cst, {"==", "!="}, "Equality")
+        return self.or_expr_cst()
 
-    def equality_cst(self) -> dict[str, Any]:
-        return self.binary_cst(self.comparison_cst, {"<", "<=", ">", ">="}, "Comparison")
+    def or_expr_cst(self) -> dict[str, Any]:
+        return self.binary_cst(self.and_expr_cst, {"or"}, "OrExpr")
 
-    def comparison_cst(self) -> dict[str, Any]:
-        return self.binary_cst(self.term_cst, {"+", "-"}, "Term")
+    def and_expr_cst(self) -> dict[str, Any]:
+        return self.binary_cst(self.compare_expr_cst, {"and"}, "AndExpr")
 
-    def term_cst(self) -> dict[str, Any]:
-        return self.binary_cst(self.factor_cst, {"*", "/"}, "Factor")
-
-    def binary_cst(self, operand, operators: set[str], rule: str) -> dict[str, Any]:
-        left = operand()
+    def compare_expr_cst(self) -> dict[str, Any]:
+        left = self.add_expr_cst()
         children = [left]
-        while self.current.value in operators:
+        while self.current.kind == "OP" and self.current.value in COMPARISON_OPS:
             children.append(self.leaf(self.advance()))
-            children.append(operand())
-        return {"rule": rule, "children": children}
+            children.append(self.add_expr_cst())
+        return {"rule": "CompareExpr", "children": children}
 
-    def factor_cst(self) -> dict[str, Any]:
-        if self.match("-", "+"):
-            operator = self.tokens[self.index - 1]
-            return {
-                "rule": "Unary",
-                "children": [self.leaf(operator), self.factor_cst()],
-            }
-        if self.match("("):
-            expression = self.expression_cst()
-            return {
-                "rule": "Grouping",
-                "children": [
-                    self.leaf(self.tokens[self.index - 1]),
-                    expression,
-                    self.leaf(self.expect(")")),
-                ],
-            }
+    def add_expr_cst(self) -> dict[str, Any]:
+        return self.binary_cst(self.mul_expr_cst, {"+", "-"}, "AddExpr")
+
+    def mul_expr_cst(self) -> dict[str, Any]:
+        return self.binary_cst(self.unary_expr_cst, {"*", "/", "%", "//"}, "MulExpr")
+
+    def unary_expr_cst(self) -> dict[str, Any]:
+        if self.current.kind == "OP" and self.current.value in {"+", "-"}:
+            operator = self.leaf(self.advance())
+            return {"rule": "UnaryExpr", "children": [operator, self.unary_expr_cst()]}
+        return self.power_expr_cst()
+
+    def power_expr_cst(self) -> dict[str, Any]:
+        left = self.primary_cst()
+        if self.current.kind == "OP" and self.current.value == "**":
+            operator = self.leaf(self.advance())
+            right = self.unary_expr_cst()
+            return {"rule": "PowerExpr", "children": [left, operator, right]}
+        return left
+
+    def primary_cst(self) -> dict[str, Any]:
         if self.current.kind == "NUMBER":
-            return {"rule": "IntLiteral", "children": [self.leaf(self.advance())]}
-        if self.current.kind == "KEYWORD" and self.current.value in {"true", "false"}:
+            return {"rule": "NumberLiteral", "children": [self.leaf(self.advance())]}
+        if self.current.kind == "STRING":
+            return {"rule": "StringLiteral", "children": [self.leaf(self.advance())]}
+        if self.current.kind == "KEYWORD" and self.current.value in {"True", "False", "None"}:
             return {"rule": "BooleanLiteral", "children": [self.leaf(self.advance())]}
         if self.current.kind == "IDENTIFIER":
-            return {"rule": "Identifier", "children": [self.leaf(self.advance())]}
-        self.error(f"Expected an expression, found {self.current.value!r}")
+            name = self.leaf(self.advance())
+            if self.current.value == "(":
+                self.expect("(")
+                args = []
+                if self.current.value != ")":
+                    args.append(self.expression_cst())
+                    while self.current.value == ",":
+                        self.advance()
+                        args.append(self.expression_cst())
+                self.expect(")")
+                return {"rule": "Call", "children": [name, *args]}
+            return {"rule": "Identifier", "children": [name]}
+        if self.current.value == "(":
+            self.expect("(")
+            inner = self.expression_cst()
+            self.expect(")")
+            return {"rule": "Grouping", "children": [inner]}
+        raise ParseError(f"Expected an expression, found {self.current.value or 'end of input'} at position {self.current.position}")
+
+    def binary_cst(self, operand_builder, operators: set[str], rule: str) -> dict[str, Any]:
+        left = operand_builder()
+        children = [left]
+        while True:
+            current = self.current
+            if current.kind == "KEYWORD" and current.value in operators:
+                token = self.leaf(self.advance())
+                right = operand_builder()
+                children.extend([token, right])
+                continue
+            if current.kind == "OP" and current.value in operators:
+                token = self.leaf(self.advance())
+                right = operand_builder()
+                children.extend([token, right])
+                continue
+            break
+        return {"rule": rule, "children": children}
 
     @staticmethod
     def leaf(token: Token) -> dict[str, Any]:
         return {"terminal": token.value, "kind": token.kind, "position": token.position}
 
-    def ast_from_program_cst(self, cst: dict[str, Any]) -> Program:
-        return Program([self.ast_from_statement(node) for node in cst["children"]])
-
-    def ast_from_statement(self, node: dict[str, Any]) -> Any:
+    def ast_from_node(self, node: dict[str, Any]) -> Any:
         rule = node["rule"]
-        children = node["children"]
-        if rule in {"VarDecl", "Assignment"}:
-            name = children[1]["terminal"]
-            expression_index = 3 if rule == "VarDecl" else 2
-            value = self.ast_from_expression(children[expression_index])
-            return VarDeclaration(name, value) if rule == "VarDecl" else Assignment(name, value)
+        children = node.get("children", [])
+
+        if rule == "Program":
+            return {"type": "Module", "body": [self.ast_from_node(child) for child in children]}
+        if rule == "Block":
+            return [self.ast_from_node(child) for child in children]
+        if rule == "ExprStmt":
+            return self.ast_from_node(children[0])
+        if rule == "Assignment":
+            target = {"type": "Name", "id": children[0]["terminal"]}
+            value = self.ast_from_node(children[2])
+            return {"type": "Assign", "target": target, "value": value, "operator": children[1]["terminal"]}
+        if rule == "ReturnStmt":
+            if not children:
+                return {"type": "Return", "value": None}
+            return {"type": "Return", "value": self.ast_from_node(children[-1])}
         if rule == "IfStmt":
-            condition = self.ast_from_expression(children[2])
-            then_branch = self.ast_from_block(children[4])
-            else_branch = self.ast_from_block(children[6]) if len(children) == 7 else None
-            return IfStatement(condition, then_branch, else_branch)
-        if rule == "WhileStmt":
-            return WhileStatement(self.ast_from_expression(children[2]), self.ast_from_block(children[4]))
-        raise ParseError(f"Unsupported statement rule {rule!r}")
-
-    def ast_from_block(self, node: dict[str, Any]) -> list[Any]:
-        return [self.ast_from_statement(child) for child in node["children"][1:-1]]
-
-    def ast_from_expression(self, node: dict[str, Any]) -> Any:
-        rule = node["rule"]
-        children = node["children"]
-        if rule in {"Equality", "Comparison", "Term", "Factor"}:
-            result = self.ast_from_expression(children[0])
-            for index in range(1, len(children), 2):
-                result = BinaryExpression(
-                    children[index]["terminal"],
-                    result,
-                    self.ast_from_expression(children[index + 1]),
-                )
+            body = self.ast_from_node(children[2])
+            result = {"type": "If", "test": self.ast_from_node(children[1]), "body": body}
+            for child in children[3:]:
+                if child.get("rule") == "ElifClause":
+                    elif_clause = child["children"]
+                    if "elif" not in result:
+                        result["elif"] = []
+                    result["elif"].append({"type": "If", "test": self.ast_from_node(elif_clause[1]), "body": self.ast_from_node(elif_clause[2])})
+                if child.get("rule") == "ElseClause":
+                    result["else"] = self.ast_from_node(child["children"][1])
             return result
-        if rule == "Unary":
-            return UnaryExpression(children[0]["terminal"], self.ast_from_expression(children[1]))
+        if rule == "WhileStmt":
+            return {"type": "While", "test": self.ast_from_node(children[1]), "body": self.ast_from_node(children[2])}
+        if rule in {"OrExpr", "AndExpr", "AddExpr", "MulExpr", "CompareExpr"}:
+            left = self.ast_from_node(children[0])
+            for index in range(1, len(children), 2):
+                left = {
+                    "type": "BinOp",
+                    "op": children[index]["terminal"],
+                    "left": left,
+                    "right": self.ast_from_node(children[index + 1]),
+                }
+            return left
+        if rule == "UnaryExpr":
+            return {"type": "UnaryOp", "op": children[0]["terminal"], "operand": self.ast_from_node(children[1])}
+        if rule == "PowerExpr":
+            return {"type": "BinOp", "op": "**", "left": self.ast_from_node(children[0]), "right": self.ast_from_node(children[2])}
         if rule == "Grouping":
-            return self.ast_from_expression(children[1])
-        if rule == "IntLiteral":
-            return Literal(int(children[0]["terminal"]))
+            return self.ast_from_node(children[0])
+        if rule == "NumberLiteral":
+            value = children[0]["terminal"]
+            return {"type": "Constant", "value": float(value) if "." in value else int(value)}
+        if rule == "StringLiteral":
+            return {"type": "Constant", "value": json.loads(children[0]["terminal"])}
         if rule == "BooleanLiteral":
-            return Literal(children[0]["terminal"] == "true")
+            return {"type": "Constant", "value": children[0]["terminal"] == "True"}
         if rule == "Identifier":
-            return Identifier(children[0]["terminal"])
-        raise ParseError(f"Unsupported expression rule {rule!r}")
+            return {"type": "Name", "id": children[0]["terminal"]}
+        if rule == "Call":
+            function = self.ast_from_node(children[0])
+            arguments = [self.ast_from_node(child) for child in children[1:]]
+            return {"type": "Call", "function": function, "arguments": arguments}
+        raise ParseError(f"Unsupported syntax rule {rule!r}")
 
 
 def parse_source(source: str) -> dict[str, Any]:
-    """Parse source and return JSON-serializable ``parse_tree`` and ``ast``."""
-    ast, parse_tree = Parser(tokenize(source)).parse()
-    return {"parse_tree": parse_tree, "ast": to_dict(ast)}
-
-
-def to_dict(value: Any) -> Any:
-    """Convert AST dataclasses and nested lists into ordinary Python values."""
-    if is_dataclass(value):
-        return {
-            "type": type(value).__name__,
-            **{field.name: to_dict(getattr(value, field.name)) for field in fields(value)},
-        }
-    if isinstance(value, list):
-        return [to_dict(item) for item in value]
-    return value
+    """Parse source and return both the concrete parse tree and the AST."""
+    parser = Parser(tokenize(source))
+    program, ast = parser.parse()
+    return {"parse_tree": program, "ast": ast}
 
 
 def main() -> None:
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Parse the EBNF mini-language and print its CST and AST.")
+    parser = argparse.ArgumentParser(description="Parse a Python subset and output its CST and AST.")
     parser.add_argument("source", nargs="?", help="source text; omit to read from standard input")
+    parser.add_argument("--ebnf", action="store_true", help="print the supported EBNF grammar before parsing")
     args = parser.parse_args()
-    source = args.source if args.source is not None else input()
+    source = args.source if args.source is not None else sys.stdin.read()
+
     try:
-        print(json.dumps(parse_source(source), indent=2))
+        if args.ebnf:
+            print(GRAMMAR)
+        print(json.dumps(parse_source(source), indent=2, ensure_ascii=False))
     except ParseError as error:
         parser.error(str(error))
 
