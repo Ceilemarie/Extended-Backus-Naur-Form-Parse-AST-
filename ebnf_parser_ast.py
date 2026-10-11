@@ -5,7 +5,8 @@ front-end concepts:
 
     Program       = { Statement } ;
     Statement     = VarDecl | Assignment | IfStmt ;
-    VarDecl       = ("let" | "const" | "var") Identifier "=" Expression ";" ;
+    VarDecl       = Type Identifier [ "=" Expression ] ";" ;
+    Type          = "int" | "float" | "bool" | "void" ;
     Assignment    = Identifier "=" Expression ";" ;
     IfStmt        = "if" "(" Expression ")" Block [ "else" Block ] ;
     Block         = "{" { Statement } "}" ;
@@ -17,7 +18,8 @@ front-end concepts:
     Primary       = Number | String | Boolean | Identifier
                   | "(" Expression ")" ;
 
-Simple statements require a semicolon. Whitespace and comments are ignored.
+This C-like teaching language uses semicolons and braces. Simple statements
+require a semicolon. Whitespace and comments are ignored.
 The public ``parse_source`` function returns JSON-serializable parse-tree and
 AST data, and ``main`` provides a console interface.
 """
@@ -35,7 +37,8 @@ from typing import Any, Iterable, NoReturn
 EBNF_GRAMMAR = """\
 Program       = { Statement } ;
 Statement     = VarDecl | Assignment | IfStmt ;
-VarDecl       = ("let" | "const" | "var") Identifier "=" Expression ";" ;
+VarDecl       = Type Identifier [ "=" Expression ] ";" ;
+Type          = "int" | "float" | "bool" | "void" ;
 Assignment    = Identifier "=" Expression ";" ;
 IfStmt        = "if" "(" Expression ")" Block [ "else" Block ] ;
 Block         = "{" { Statement } "}" ;
@@ -122,7 +125,8 @@ TOKEN_RE = re.compile(
     re.VERBOSE,
 )
 
-KEYWORDS = {"let", "const", "var", "if", "else", "true", "false"}
+TYPES = {"int", "float", "bool", "void"}
+KEYWORDS = TYPES | {"if", "else", "true", "false"}
 
 
 def tokenize(source: str) -> list[Token]:
@@ -220,17 +224,20 @@ class Parser:
             return self.statement_cst()
         if self.current.kind == "KEYWORD" and self.current.value == "if":
             return self.if_cst()
+        if self.current.kind == "KEYWORD" and self.current.value in TYPES:
+            return self.var_decl_cst()
         if self.current.kind == "IDENTIFIER":
             return self.assignment_cst()
-        self.error("Expected a variable declaration, assignment, or if statement")
+        self.error("Expected a C-like declaration, assignment, or if statement")
 
     def var_decl_cst(self) -> dict[str, Any]:
         keyword = self.leaf(self.advance())
         name = self.leaf(self.expect_kind("IDENTIFIER"))
-        equals = self.leaf(self.expect("="))
-        expression = self.expression_cst()
-        semicolon = self.leaf(self.expect(";"))
-        return {"rule": "VarDecl", "children": [keyword, name, equals, expression, semicolon]}
+        children = [keyword, name]
+        if self.match("="):
+            children.extend([self.leaf(self.previous), self.expression_cst()])
+        children.append(self.leaf(self.expect(";")))
+        return {"rule": "VarDecl", "children": children}
 
     def assignment_cst(self) -> dict[str, Any]:
         target = self.leaf(self.expect_kind("IDENTIFIER"))
@@ -314,7 +321,8 @@ class Parser:
     def ast_from_statement(self, node: dict[str, Any]) -> Any:
         children = node["children"]
         if node["rule"] == "VarDecl":
-            return VarDeclaration(children[0]["terminal"], children[1]["terminal"], self.ast_from_expression(children[3]))
+            initializer = self.ast_from_expression(children[3]) if len(children) == 5 else None
+            return VarDeclaration(children[0]["terminal"], children[1]["terminal"], initializer)
         if node["rule"] == "Assignment":
             return Assignment(children[0]["terminal"], self.ast_from_expression(children[2]))
         if node["rule"] == "IfStmt":

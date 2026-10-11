@@ -81,15 +81,15 @@
             </div>
             <div class="preset-group">
               <span class="preset-label">EBNF examples:</span>
-              <button class="preset-btn" data-code="int total = 10 + 5;">Declaration</button>
-              <button class="preset-btn" data-code="if (total >= 15) { total = total + 1; }">If statement</button>
-              <button class="preset-btn" data-code="int x = 3; if (x == 3) { x = x + 1; }">Block</button>
+              <button class="preset-btn" data-code="int x = 10;">Declaration</button>
+              <button class="preset-btn" data-code="total = x + 5;">Assignment</button>
+              <button class="preset-btn" data-code="if (total &gt; 10) { total = total + 1; }">Conditional</button>
             </div>
           </div>
 
           <div class="bot-message-box">
             <p class="bot-prompt">
-              &gt; <strong>EBNF:</strong> Enter code that follows the grammar.
+              &gt; <strong>EBNF:</strong> Enter C-like code that follows the grammar.
             </p>
           </div>
 
@@ -100,9 +100,8 @@
               autocomplete="off" 
               spellcheck="false" 
               rows="4"
-            >int total = 10 + 5;</textarea>
-            <label class="upload-btn" for="sourceFile">Upload source</label>
-            <input id="sourceFile" type="file" accept=".txt,.c,.cpp,.h" />
+            >int x = 10;
+int total = x + 5;</textarea>
             <button id="runBtn" class="run-btn" aria-label="Analyze input" title="Analyze input">&rarr;</button>
           </div>
         </div>
@@ -174,8 +173,6 @@
             Waiting for source input.
           </div>
           <pre id="ebnfOutput" class="ebnf-output" aria-label="Generated EBNF grammar"></pre>
-          <h5 class="derivation-title">EBNF derivation for current input</h5>
-          <pre id="derivationOutput" class="ebnf-output derivation-output" aria-label="EBNF derivation for current input">Run the analyzer to show the productions used by your input.</pre>
         </div>
 
         <!-- 25% Deliverable: Token Stream Breakdown -->

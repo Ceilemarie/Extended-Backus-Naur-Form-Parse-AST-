@@ -345,12 +345,6 @@ p.subtitle{
   text-align: center;
 }
 
-@keyframes rotate-input-border {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .bot-message-box .bot-prompt {
   position: relative;
   z-index: 2;
@@ -371,49 +365,14 @@ p.subtitle{
 
 .input-row {
   position: relative;
-  isolation: isolate;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 6px 8px 6px 18px;
-  background: transparent;
-  border: none;
+  background: #ffffff;
+  border: 2px solid #000000;
   border-radius: 24px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-  overflow: hidden;
-}
-
-.input-row::before,
-.input-row::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-}
-
-.input-row::before {
-  z-index: 0;
-  inset: -80%;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    #2dd4bf 80deg,
-    #38bdf8 150deg,
-    #a855f7 220deg,
-    transparent 300deg
-  );
-  animation: rotate-input-border 4s linear infinite;
-}
-
-.input-row::after {
-  z-index: 1;
-  inset: 1px;
-  border-radius: 23px;
-  background: #18181b;
-}
-
-.input-row > * {
-  position: relative;
-  z-index: 2;
 }
 
 #codeInput {
@@ -424,7 +383,7 @@ p.subtitle{
   padding: 10px 0;
   font-family: 'Inter', sans-serif;
   font-size: 14px;
-  color: #ffffff;
+  color: #18181b;
   outline: none;
   resize: vertical;
   line-height: 1.5;
@@ -451,26 +410,6 @@ p.subtitle{
 
 .run-btn:hover {
   background: #14b8a6;
-}
-
-#pythonFile {
-  display: none;
-}
-
-.upload-btn {
-  flex: 0 0 auto;
-  padding: 9px 12px;
-  border: 1px solid #3f3f46;
-  border-radius: 18px;
-  color: #a1a1aa;
-  font-size: 11px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.upload-btn:hover {
-  color: #ffffff;
-  border-color: #2dd4bf;
 }
 
 /* Panel Sections & Tables */
@@ -516,17 +455,6 @@ p.subtitle{
 .grammar-status.grammar-invalid {
   border-color: rgba(248, 113, 113, 0.65);
   color: #fecaca;
-}
-
-.derivation-title {
-  margin: 1.25rem 0 0.6rem;
-  color: #e4e4e7;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.derivation-output {
-  color: #ddd6fe;
 }
 
 .panel-header {
@@ -1076,10 +1004,6 @@ body.theme-light .grammar-status.grammar-invalid {
   color: #b91c1c;
 }
 
-body.theme-light .derivation-title {
-  color: #18181b;
-}
-
 body.theme-light .theory-card p {
   color: #52525b;
 }
@@ -1111,25 +1035,12 @@ body.theme-light .bot-prompt {
 }
 
 body.theme-light .input-row {
-  border-color: transparent;
+  background: #ffffff;
+  border-color: #000000;
   box-shadow: 0 8px 24px rgba(24, 24, 27, 0.08);
 }
 
-body.theme-light .input-row::after {
-  background: #ffffff;
-}
-
 body.theme-light #codeInput {
-  color: #18181b;
-}
-
-body.theme-light .upload-btn {
-  border-color: #d4d4d8;
-  color: #52525b;
-}
-
-body.theme-light .upload-btn:hover {
-  border-color: #0f766e;
   color: #18181b;
 }
 
