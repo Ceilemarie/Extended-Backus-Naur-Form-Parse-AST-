@@ -203,7 +203,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   updateThemeToggleLabels();
 
-  // --- 3. PYTHON LEXER / TOKENIZER CORE ---
+  // --- 3. TEACHING-LANGUAGE LEXER / PARSER CORE ---
   const codeInput = document.getElementById("codeInput");
   const runBtn = document.getElementById("runBtn");
   const tokenTableBody = document.getElementById("tokenTableBody");
@@ -214,33 +214,40 @@ window.addEventListener("DOMContentLoaded", () => {
   const astTitle = document.getElementById("astTitle");
   const parseTreeOutput = document.getElementById("parseTreeOutput");
   const astOutput = document.getElementById("astOutput");
+  const ebnfOutput = document.getElementById("ebnfOutput");
+  const grammarStatus = document.getElementById("grammarStatus");
+  const derivationOutput = document.getElementById("derivationOutput");
 
   const KEYWORDS = new Set([
     "and", "as", "assert", "async", "await", "break", "class", "continue",
     "def", "del", "elif", "else", "except", "False", "finally", "for", "from",
     "global", "if", "import", "in", "is", "lambda", "None", "nonlocal", "not",
     "or", "pass", "raise", "return", "True", "try", "while", "with", "yield",
+    "int", "float", "void", "bool", "true", "false",
   ]);
   const OPERATORS = ["**", "//", "->", ":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=", "=>", "+", "-", "*", "/", "%", "=", "<", ">", "|", "&", "^", "~"];
   const DELIMITERS = new Set(["(", ")", "[", "]", "{", "}", ",", ":", ".", ";"]);
-  const EBNF_GRAMMAR = `Program = { Statement } ;
-Statement = Assignment | IfStmt | WhileStmt | ReturnStmt | ExprStmt ;
-Assignment = Identifier, "=", Expression, NEWLINE ;
-IfStmt = "if", Expression, ":", Suite,
-         { "elif", Expression, ":", Suite },
-         [ "else", ":", Suite ] ;
-WhileStmt = "while", Expression, ":", Suite ;
-ReturnStmt = "return", [ Expression ], NEWLINE ;
-ExprStmt = Expression, NEWLINE ;
-Suite = NEWLINE, INDENT, { Statement }, DEDENT ;
-Expression = OrExpr ;
-OrExpr = AndExpr, { "or", AndExpr } ;
-AndExpr = CompareExpr, { "and", CompareExpr } ;
-CompareExpr = AddExpr, [ CompOp, AddExpr ] ;
-AddExpr = MulExpr, { ("+" | "-"), MulExpr } ;
-MulExpr = UnaryExpr, { ("*" | "/" | "%" | "//"), UnaryExpr } ;
-UnaryExpr = [ ("+" | "-") ], Primary ;
-Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expression, ")" ;`;
+  const EBNF_GRAMMAR = `program      = { statement } ;
+statement    = var_decl | assignment | if_stmt | while_stmt ;
+var_decl     = type, identifier, [ "=", expression ], ";" ;
+type         = "int" | "float" | "void" | "bool" ;
+assignment   = identifier, "=", expression, ";" ;
+if_stmt      = "if", "(", expression, ")", block,
+               [ "else", block ] ;
+while_stmt   = "while", "(", expression, ")", block ;
+block        = "{", { statement }, "}" ;
+expression   = equality ;
+equality     = relational, { ( "==" | "!=" ), relational } ;
+relational   = additive, { ( "<" | ">" | "<=" | ">=" ), additive } ;
+additive     = term, { ( "+" | "-" ), term } ;
+term         = factor, { ( "*" | "/" ), factor } ;
+factor       = [ ( "+" | "-" ) ],
+               ( identifier | number | boolean | "(", expression, ")" ) ;
+identifier   = letter, { letter | digit | "_" } ;
+number       = digit, { digit } ;
+boolean      = "true" | "false" ;
+letter       = "A" | ... | "Z" | "a" | ... | "z" ;
+digit        = "0" | ... | "9" ;`;
 
   function tokenize(code) {
     const tokens = [];
@@ -337,6 +344,12 @@ Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expres
 
   function runLexer() {
     const code = codeInput.value;
+    ebnfOutput.textContent = EBNF_GRAMMAR;
+    grammarStatus.textContent = code.trim() ? "Validating input against the grammar..." : "Waiting for source input.";
+    grammarStatus.className = "grammar-status";
+    derivationOutput.textContent = code.trim()
+      ? "Run the analyzer to show the productions used by your input."
+      : "Enter source code to generate an EBNF derivation.";
     parseTreeTitle.textContent = "Concrete Parse Tree (CST)";
     astTitle.textContent = "Abstract Syntax Tree (AST)";
     const tokens = tokenize(code);
@@ -439,7 +452,7 @@ Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expres
       if (!["int", "float", "void", "bool"].includes(current().value)) {
         error("Expected a type (int, float, void, or bool)");
       }
-      const type = leaf(expectKind("Identifier"));
+      const type = leaf(parserTokens[index++]);
       const name = leaf(expectKind("Identifier"));
       const children = [type, name];
       if (match("=")) {
@@ -562,7 +575,6 @@ Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expres
   }
 
   function renderTrees(code, tokens) {
-    renderEbnf();
     parseTreeOutput.classList.remove("tree-output", "tree-error");
     astOutput.classList.remove("tree-output", "tree-error");
     if (!code.trim()) {
@@ -572,18 +584,60 @@ Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expres
     }
     try {
       const result = parseSource(code, tokens);
-      const result = parseSource(code, tokens);
+      grammarStatus.textContent = "Valid: input matches the displayed EBNF grammar.";
+      grammarStatus.className = "grammar-status grammar-valid";
+      derivationOutput.textContent = buildDerivation(result.parseTree);
       parseTreeOutput.classList.add("tree-output");
       astOutput.classList.add("tree-output");
       renderMermaidTree(parseTreeOutput, result.parseTree, "cst");
       renderMermaidTree(astOutput, result.ast, "ast");
     } catch (error) {
+      grammarStatus.textContent = `Invalid: ${error.message}`;
+      grammarStatus.className = "grammar-status grammar-invalid";
+      derivationOutput.textContent = "No derivation generated because the input does not match the grammar.";
       const message = `<p>Parse error: ${escapeHtml(error.message)}</p>`;
       parseTreeOutput.classList.add("tree-error");
       astOutput.classList.add("tree-error");
       parseTreeOutput.innerHTML = message;
       astOutput.innerHTML = message;
     }
+  }
+
+  function buildDerivation(parseTree) {
+    const productions = [];
+    const seen = new Set();
+    const add = (rule, production) => {
+      if (!seen.has(rule)) {
+        seen.add(rule);
+        productions.push(`${rule} => ${production}`);
+      }
+    };
+    const visit = (node) => {
+      if (!node || typeof node !== "object") return;
+      if (node.rule === "Program") add("program", "{ statement }");
+      if (node.rule === "declaration") add("statement", "var_decl");
+      if (node.rule === "var_decl") {
+        add("var_decl", node.children.length === 5
+          ? 'type identifier "=" expression ";"'
+          : 'type identifier ";"');
+      }
+      if (node.rule === "Assignment") add("assignment", 'identifier "=" expression ";"');
+      if (node.rule === "IfStmt") add("if_stmt", '"if" "(" expression ")" block [ "else" block ]');
+      if (node.rule === "WhileStmt") add("while_stmt", '"while" "(" expression ")" block');
+      if (node.rule === "Block") add("block", '"{" { statement } "}"');
+      if (node.rule === "equality") add("equality", 'relational { ( "==" | "!=" ) relational }');
+      if (node.rule === "relational") add("relational", 'additive { ( "<" | ">" | "<=" | ">=" ) additive }');
+      if (node.rule === "additive") add("additive", 'term { ( "+" | "-" ) term }');
+      if (node.rule === "term") add("term", 'factor { ( "*" | "/" ) factor }');
+      if (node.rule === "number") add("factor", "number");
+      if (node.rule === "Identifier") add("factor", "identifier");
+      if (node.rule === "BooleanLiteral") add("factor", "boolean");
+      if (node.rule === "Grouping") add("factor", '"(" expression ")"');
+      if (node.rule === "Unary") add("factor", '[ ( "+" | "-" ) ] factor');
+      if (Array.isArray(node.children)) node.children.forEach(visit);
+    };
+    visit(parseTree);
+    return productions.join("\n");
   }
 
   function renderMermaidTree(container, value, mode) {
@@ -598,6 +652,7 @@ Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expres
     const diagram = buildMermaidTree(value, mode);
     container.innerHTML = `<div class="mermaid">${diagram}</div>`;
     const diagramId = `${mode}Tree${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    window.mermaid.initialize({ startOnLoad: false, securityLevel: "loose" });
     window.mermaid.render(diagramId, diagram)
       .then(({ svg, bindFunctions }) => {
         container.innerHTML = svg;
@@ -655,7 +710,8 @@ Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expres
     return String(value)
       .replace(/\\/g, "\\\\")
       .replace(/"/g, "#quot;")
-      .replace(/[<>]/g, "")
+      .replace(/</g, "#lt;")
+      .replace(/>/g, "#gt;")
       .replace(/\n/g, "<br/>");
   }
 
@@ -704,9 +760,9 @@ Primary = NUMBER | STRING | "True" | "False" | "None" | Identifier | "(", Expres
   });
 
   const grammarExamples = [
-    "total = 10 + 5\nprint(total)",
-    "if score >= 75:\n    passed = True\nelse:\n    passed = False",
-    "count = 0\nwhile count < 3:\n    count = count + 1",
+    "int total = 10 + 5;",
+    "if (total >= 15) { total = total + 1; }",
+    "int x = 3; if (x == 3) { x = x + 1; }",
   ];
 
   presetBtns.forEach((btn, index) => {

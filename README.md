@@ -1,6 +1,6 @@
 # Extended Backus–Naur Form Parse & AST Demo
 
-This project is an interactive educational web app that demonstrates the basics of EBNF (Extended Backus–Naur Form), lexical analysis, and the difference between a concrete parse tree and an abstract syntax tree (AST). It is designed as a visual learning tool for beginners exploring formal grammar and parser concepts, using Python as the only supported language.
+This project is an interactive educational web app that demonstrates the basics of EBNF (Extended Backus–Naur Form), lexical analysis, and the difference between a concrete parse tree and an abstract syntax tree (AST). It is designed as a visual learning tool for beginners exploring formal grammar and parser concepts. The browser Learning Workspace uses the C-like teaching language shown in its generated grammar panel.
 
 The app presents a dark cyberpunk-style landing page, a sand-particle background animation, and a second workspace panel where users can enter source code or upload a file and inspect its tokens, concrete parse tree, and AST.
 
@@ -27,8 +27,9 @@ In short, it teaches how source code is broken down into meaningful pieces befor
 
 ## Core concept
 
-The app accepts Python source exclusively. Its browser parser generates a
-concrete parse tree and an abstract syntax tree from typed or uploaded source.
+The browser workspace accepts the supported C-like teaching language. Its
+parser generates the displayed EBNF grammar, a concrete parse tree, and an
+abstract syntax tree from typed or uploaded source.
 
 The flow is:
 
@@ -74,7 +75,8 @@ After clicking Start, the app transitions to a learning workspace with:
 - a multiline source-code console input area
 - preset buttons for statement and conditional examples
 - a source-file upload control
-- automatic AST-to-JSON tree visualization
+- generated EBNF grammar output
+- Mermaid concrete parse-tree and AST visualizations
 - a token table that updates live
 
 ### 4. Tokenizer / lexer

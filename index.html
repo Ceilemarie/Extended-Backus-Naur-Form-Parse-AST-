@@ -3,7 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Project-EBNF</title>
+    <title>EBNF Generator</title>
+    <link rel="icon" type="image/jpeg" href="lain.jpg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;400;600&display=swap" rel="stylesheet">
@@ -160,6 +161,23 @@
           </div>
         </div>
 
+        <div class="panel-section grammar-section">
+          <div class="panel-header">
+            <h4>Generated EBNF Grammar</h4>
+            <span class="panel-badge">Teaching grammar</span>
+          </div>
+          <p class="tree-explanation">
+            This is the grammar used to validate the source and build the CST
+            and AST below.
+          </p>
+          <div id="grammarStatus" class="grammar-status" role="status">
+            Waiting for source input.
+          </div>
+          <pre id="ebnfOutput" class="ebnf-output" aria-label="Generated EBNF grammar"></pre>
+          <h5 class="derivation-title">EBNF derivation for current input</h5>
+          <pre id="derivationOutput" class="ebnf-output derivation-output" aria-label="EBNF derivation for current input">Run the analyzer to show the productions used by your input.</pre>
+        </div>
+
         <!-- 25% Deliverable: Token Stream Breakdown -->
         <div class="panel-section">
           <div class="panel-header">
@@ -186,7 +204,7 @@
       </div>
     </section>
 
-    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <script src="mermaid.min.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

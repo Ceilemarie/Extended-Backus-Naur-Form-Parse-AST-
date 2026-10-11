@@ -481,6 +481,54 @@ p.subtitle{
   padding: 20px;
 }
 
+.grammar-section {
+  margin-top: 2rem;
+}
+
+.ebnf-output {
+  margin: 0;
+  overflow-x: auto;
+  padding: 1.25rem;
+  border: 1px solid rgba(94, 234, 212, 0.35);
+  border-radius: 0.75rem;
+  background: rgba(8, 15, 25, 0.72);
+  color: #ccfbf1;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.9rem;
+  line-height: 1.7;
+  white-space: pre;
+}
+
+.grammar-status {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid rgba(161, 161, 170, 0.35);
+  border-radius: 0.55rem;
+  color: #d4d4d8;
+  font-size: 0.85rem;
+}
+
+.grammar-status.grammar-valid {
+  border-color: rgba(45, 212, 191, 0.55);
+  color: #99f6e4;
+}
+
+.grammar-status.grammar-invalid {
+  border-color: rgba(248, 113, 113, 0.65);
+  color: #fecaca;
+}
+
+.derivation-title {
+  margin: 1.25rem 0 0.6rem;
+  color: #e4e4e7;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.derivation-output {
+  color: #ddd6fe;
+}
+
 .panel-header {
   display: flex;
   justify-content: space-between;
@@ -1007,6 +1055,28 @@ body.theme-light .tree-container {
 
 body.theme-light .theory-card h3,
 body.theme-light .panel-header h4 {
+  color: #18181b;
+}
+
+body.theme-light .ebnf-output {
+  background: #f8fafc;
+  border-color: #99f6e4;
+  color: #115e59;
+}
+
+body.theme-light .grammar-status {
+  color: #52525b;
+}
+
+body.theme-light .grammar-status.grammar-valid {
+  color: #115e59;
+}
+
+body.theme-light .grammar-status.grammar-invalid {
+  color: #b91c1c;
+}
+
+body.theme-light .derivation-title {
   color: #18181b;
 }
 
