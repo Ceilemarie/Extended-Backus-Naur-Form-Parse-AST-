@@ -1,47 +1,55 @@
-"""A Python parser and AST demo.
+"""A small EBNF-driven parser that produces a concrete tree and an AST.
 
-The module implements a subset of Python syntax:
+The language is intentionally small and suitable for demonstrating compiler
+front-end concepts:
 
-    Program        = { Statement } ;
-    Statement      = SimpleStmt | CompoundStmt ;
-    SimpleStmt     = Assignment | ExprStmt | PassStmt | BreakStmt | ContinueStmt | ReturnStmt ;
-    CompoundStmt   = IfStmt | WhileStmt | ForStmt | FunctionDef | ClassDef | TryStmt ;
-    Assignment     = (Identifier | TupleTarget) "=" Expression ;
-    Expression     = Lambda | IfExpr | OrTest ;
-    OrTest         = AndTest { "or" AndTest } ;
-    AndTest        = NotTest { "and" NotTest } ;
-    NotTest        = "not" NotTest | Comparison ;
-    Comparison     = Expr { CompOp Expr } ;
-    CompOp         = "<" | ">" | "==" | ">=" | "<=" | "!=" | "in" | "not in" | "is" | "is not" ;
-    Expr           = Term { ("+" | "-") Term } ;
-    Term           = Factor { ("*" | "/" | "//" | "%" | "@") Factor } ;
-    Factor         = ("+" | "-" | "~") Factor | Power ;
-    Power          = Primary { "**" Factor } ;
-    Primary        = Literal | Identifier | "(" Expression ")" | "[" [ExpressionList] "]" | "{" [DictItems] "}" | Primary "." Identifier | Primary "(" [ArgList] ")" | Primary "[" Expression "]" ;
-    Literal        = String | Number | "True" | "False" | "None" ;
-    IfStmt         = "if" Expression ":" Suite { "elif" Expression ":" Suite } ["else" ":" Suite] ;
-    WhileStmt      = "while" Expression ":" Suite ["else" ":" Suite] ;
-    ForStmt        = "for" TargetList "in" Expression ":" Suite ["else" ":" Suite] ;
-    FunctionDef    = "def" Identifier "(" [Parameters] ")" ["->" Expression] ":" Suite ;
-    ClassDef       = "class" Identifier ["(" [ArgList] ")"] ":" Suite ;
-    TryStmt        = "try" ":" Suite { ExceptClause } ["else" ":" Suite] ["finally" ":" Suite] ;
-    Suite          = SimpleStmt { ";" SimpleStmt } [";"] NEWLINE INDENT { Statement } DEDENT ;
+    Program       = { Statement } ;
+    Statement     = VarDecl | Assignment | IfStmt ;
+    VarDecl       = ("let" | "const" | "var") Identifier "=" Expression ";" ;
+    Assignment    = Identifier "=" Expression ";" ;
+    IfStmt        = "if" "(" Expression ")" Block [ "else" Block ] ;
+    Block         = "{" { Statement } "}" ;
+    Expression    = Comparison { ("==" | "!=") Comparison } ;
+    Comparison    = Term { ("<" | "<=" | ">" | ">=") Term } ;
+    Term          = Factor { ("+" | "-") Factor } ;
+    Factor        = Unary { ("*" | "/" | "%") Unary } ;
+    Unary         = ("+" | "-") Unary | Primary ;
+    Primary       = Number | String | Boolean | Identifier
+                  | "(" Expression ")" ;
 
-It is deliberately self-contained so it can be uploaded as one Python file.
-The public ``parse_source`` function returns both a concrete parse tree and an
-abstract syntax tree.
+Simple statements require a semicolon. Whitespace and comments are ignored.
+The public ``parse_source`` function returns JSON-serializable parse-tree and
+AST data, and ``main`` provides a console interface.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, fields, is_dataclass
+import argparse
 import json
 import re
+import sys
 from typing import Any, Iterable, NoReturn
 
 
+EBNF_GRAMMAR = """\
+Program       = { Statement } ;
+Statement     = VarDecl | Assignment | IfStmt ;
+VarDecl       = ("let" | "const" | "var") Identifier "=" Expression ";" ;
+Assignment    = Identifier "=" Expression ";" ;
+IfStmt        = "if" "(" Expression ")" Block [ "else" Block ] ;
+Block         = "{" { Statement } "}" ;
+Expression    = Comparison { ("==" | "!=") Comparison } ;
+Comparison    = Term { ("<" | "<=" | ">" | ">=") Term } ;
+Term          = Factor { ("+" | "-") Factor } ;
+Factor        = Unary { ("*" | "/" | "%") Unary } ;
+Unary         = ("+" | "-") Unary | Primary ;
+Primary       = Number | String | Boolean | Identifier | "(" Expression ")" ;
+"""
+
+
 class ParseError(ValueError):
-    """Raised when source text does not conform to the Python grammar."""
+    """Raised when source text does not match the grammar."""
 
 
 @dataclass(frozen=True)
@@ -59,80 +67,23 @@ class Program:
 
 
 @dataclass(frozen=True)
+class VarDeclaration:
+    keyword: str
+    name: str
+    initializer: Any
+
+
+@dataclass(frozen=True)
 class Assignment:
-    targets: list[Any]
+    name: str
     value: Any
-
-
-@dataclass(frozen=True)
-class ExprStatement:
-    expression: Any
-
-
-@dataclass(frozen=True)
-class PassStatement:
-    pass
-
-
-@dataclass(frozen=True)
-class BreakStatement:
-    pass
-
-
-@dataclass(frozen=True)
-class ContinueStatement:
-    pass
-
-
-@dataclass(frozen=True)
-class ReturnStatement:
-    value: Any | None
 
 
 @dataclass(frozen=True)
 class IfStatement:
     condition: Any
     then_branch: list[Any]
-    elif_branches: list[tuple[Any, list[Any]]]
     else_branch: list[Any] | None
-
-
-@dataclass(frozen=True)
-class WhileStatement:
-    condition: Any
-    body: list[Any]
-    else_branch: list[Any] | None
-
-
-@dataclass(frozen=True)
-class ForStatement:
-    target: Any
-    iterable: Any
-    body: list[Any]
-    else_branch: list[Any] | None
-
-
-@dataclass(frozen=True)
-class FunctionDef:
-    name: str
-    params: list[Any]
-    returns: Any | None
-    body: list[Any]
-
-
-@dataclass(frozen=True)
-class ClassDef:
-    name: str
-    bases: list[Any]
-    body: list[Any]
-
-
-@dataclass(frozen=True)
-class TryStatement:
-    body: list[Any]
-    except_clauses: list[tuple[Any | None, Any | None, list[Any]]]
-    else_branch: list[Any] | None
-    finally_branch: list[Any] | None
 
 
 @dataclass(frozen=True)
@@ -158,111 +109,53 @@ class Identifier:
     name: str
 
 
-@dataclass(frozen=True)
-class Call:
-    func: Any
-    args: list[Any]
-    keywords: list[tuple[str | None, Any]]
-
-
-@dataclass(frozen=True)
-class Attribute:
-    value: Any
-    attr: str
-
-
-@dataclass(frozen=True)
-class Subscript:
-    value: Any
-    slice: Any
-
-
-@dataclass(frozen=True)
-class ListExpr:
-    elements: list[Any]
-
-
-@dataclass(frozen=True)
-class DictExpr:
-    items: list[tuple[Any, Any]]
-
-
-@dataclass(frozen=True)
-class TupleExpr:
-    elements: list[Any]
-
-
-@dataclass(frozen=True)
-class LambdaExpr:
-    params: list[Any]
-    body: Any
-
-
-@dataclass(frozen=True)
-class IfExpression:
-    test: Any
-    body: Any
-    orelse: Any
-
-
-@dataclass(frozen=True)
-class Compare:
-    left: Any
-    ops: list[tuple[str, Any]]
-
-
 TOKEN_RE = re.compile(
     r"""
-    (?P<WHITESPACE>[ \t\f]+)
+    (?P<WHITESPACE>[ \t\r]+)
   | (?P<NEWLINE>\n)
-  | (?P<COMMENT>#[^\n]*)
-  | (?P<STRING>\"\"\"[\s\S]*?\"\"\"|\'\'\'[\s\S]*?\'\'\'|\"[^\n\"]*\"|\'[^\n\']*\')
-  | (?P<NUMBER>\d+\.\d*|\.\d+|\d+[eE][+-]?\d+|\d+\.\d*[eE][+-]?\d+|\d+)
-  | (?P<ELLIPSIS>\.\.\.)
-  | (?P<OP>\+=|-=|\*=|/=|//=|%=|@=|\*\*=|\|=|&=|\^=|>>=|<<=|\*\*|//|<<|>>|<=|>=|==|!=|[+\-*/%@<>=&|^~:.,;@])
+  | (?P<COMMENT>\#[^\n]*)
+  | (?P<STRING>"(?:\\.|[^"\n])*"|'(?:\\.|[^'\n])*')
+  | (?P<NUMBER>\d+(?:\.\d+)?)
+  | (?P<OP>==|!=|<=|>=|[+\-*/%<>=();{}])
   | (?P<IDENTIFIER>[A-Za-z_][A-Za-z0-9_]*)
-  | (?P<INDENT>INDENT)
-  | (?P<DEDENT>DEDENT)
     """,
     re.VERBOSE,
 )
 
-PYTHON_KEYWORDS = {
-    "False", "None", "True", "and", "as", "assert", "async", "await",
-    "break", "class", "continue", "def", "del", "elif", "else", "except",
-    "finally", "for", "from", "global", "if", "import", "in", "is",
-    "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try",
-    "while", "with", "yield", "match", "case", "type"
-}
-
-SOFT_KEYWORDS = {"_", "match", "case", "type"}
-
-COMPARISON_OPS = {"<", ">", "<=", ">=", "==", "!=", "in", "not in", "is", "is not"}
+KEYWORDS = {"let", "const", "var", "if", "else", "true", "false"}
 
 
 def tokenize(source: str) -> list[Token]:
-    """Convert source text into tokens and reject unknown characters."""
+    """Tokenize source and report the exact line and column of bad input."""
     tokens: list[Token] = []
     position = 0
+    line = 1
+    column = 1
     while position < len(source):
         match = TOKEN_RE.match(source, position)
         if match is None:
-            raise ParseError(f"Unexpected character {source[position]!r} at {position}")
-
+            char = source[position]
+            raise ParseError(f"Unexpected character {char!r} at line {line}, column {column}")
         kind = match.lastgroup
         value = match.group()
-        if kind not in {"WHITESPACE", "COMMENT"}:
-            if kind == "IDENTIFIER" and value in KEYWORDS:
-                kind = "KEYWORD"
-            tokens.append(Token(kind, value, position))
+        token = Token(
+            "KEYWORD" if kind == "IDENTIFIER" and value in KEYWORDS else kind,
+            value,
+            position,
+            line,
+            column,
+        )
+        if kind not in {"WHITESPACE", "NEWLINE", "COMMENT"}:
+            tokens.append(token)
+        line += value.count("\n")
+        column = column + len(value) if "\n" not in value else len(value.rsplit("\n", 1)[-1]) + 1
         position = match.end()
-
-    tokens.append(Token("EOF", "", len(source)))
+    tokens.append(Token("EOF", "", len(source), line, column))
     return tokens
 
 
 class Parser:
-    """Recursive-descent parser with standard operator precedence."""
+    """Recursive-descent parser with arithmetic and comparison precedence."""
 
     def __init__(self, tokens: Iterable[Token]):
         self.tokens = list(tokens)
@@ -298,14 +191,12 @@ class Parser:
         return self.advance()
 
     def error(self, message: str) -> NoReturn:
-        raise ParseError(f"{message} at position {self.current.position}")
+        token = self.current
+        raise ParseError(f"{message} at line {token.line}, column {token.column}")
 
     def parse(self) -> tuple[Program, dict[str, Any]]:
-        """Return an AST and a concrete parse tree for the complete program."""
-        cst = self.program_cst()
-        if self.current.kind != "EOF":
-            self.error(f"Unexpected token {self.current.value!r}")
-        return self.ast_from_program_cst(cst), cst
+        tree = self.program_cst()
+        return self.ast_from_program(tree), tree
 
     def program_cst(self) -> dict[str, Any]:
         children = []
@@ -318,11 +209,9 @@ class Parser:
             return self.var_decl_cst()
         if self.check("if"):
             return self.if_cst()
-        if self.check("while"):
-            return self.while_cst()
         if self.current.kind == "IDENTIFIER":
             return self.assignment_cst()
-        self.error(f"Expected a statement, found {self.current.value!r}")
+        self.error("Expected a variable declaration, assignment, or if statement")
 
     def var_decl_cst(self) -> dict[str, Any]:
         keyword = self.leaf(self.advance())
@@ -341,146 +230,134 @@ class Parser:
 
     def if_cst(self) -> dict[str, Any]:
         children = [self.leaf(self.expect("if")), self.leaf(self.expect("("))]
-        children.append(self.expression_cst())
-        children.extend([self.leaf(self.expect(")")), self.block_cst()])
+        children.extend([self.expression_cst(), self.leaf(self.expect(")")), self.block_cst()])
         if self.match("else"):
             children.extend([self.leaf(self.tokens[self.index - 1]), self.block_cst()])
         return {"rule": "IfStmt", "children": children}
-
-    def while_cst(self) -> dict[str, Any]:
-        children = [self.leaf(self.expect("while")), self.leaf(self.expect("("))]
-        children.extend([self.expression_cst(), self.leaf(self.expect(")")), self.block_cst()])
-        return {"rule": "WhileStmt", "children": children}
 
     def block_cst(self) -> dict[str, Any]:
         children = [self.leaf(self.expect("{"))]
         while not self.check("}") and self.current.kind != "EOF":
             children.append(self.statement_cst())
+        if self.current.kind == "EOF":
+            self.error("Expected '}' to close block")
         children.append(self.leaf(self.expect("}")))
         return {"rule": "Block", "children": children}
 
     def expression_cst(self) -> dict[str, Any]:
-        return self.binary_cst(self.equality_cst, {"==", "!="}, "Equality")
-
-    def equality_cst(self) -> dict[str, Any]:
-        return self.binary_cst(self.comparison_cst, {"<", "<=", ">", ">="}, "Comparison")
+        return self.binary_cst(self.comparison_cst, {"==", "!="}, "Expression")
 
     def comparison_cst(self) -> dict[str, Any]:
-        return self.binary_cst(self.term_cst, {"+", "-"}, "Term")
+        return self.binary_cst(self.term_cst, {"<", "<=", ">", ">="}, "Comparison")
 
     def term_cst(self) -> dict[str, Any]:
-        return self.binary_cst(self.factor_cst, {"*", "/"}, "Factor")
-
-    def binary_cst(self, operand, operators: set[str], rule: str) -> dict[str, Any]:
-        left = operand()
-        children = [left]
-        while self.current.value in operators:
-            children.append(self.leaf(self.advance()))
-            children.append(operand())
-        return {"rule": rule, "children": children}
+        return self.binary_cst(self.factor_cst, {"+", "-"}, "Term")
 
     def factor_cst(self) -> dict[str, Any]:
-        if self.match("-", "+"):
-            operator = self.tokens[self.index - 1]
-            return {
-                "rule": "Unary",
-                "children": [self.leaf(operator), self.factor_cst()],
-            }
+        return self.binary_cst(self.unary_cst, {"*", "/", "%"}, "Factor")
+
+    def binary_cst(self, operand: Any, operators: set[str], rule: str) -> dict[str, Any]:
+        children = [operand()]
+        while self.current.value in operators:
+            children.extend([self.leaf(self.advance()), operand()])
+        return {"rule": rule, "children": children}
+
+    def unary_cst(self) -> dict[str, Any]:
+        if self.match("+", "-"):
+            return {"rule": "Unary", "children": [self.leaf(self.tokens[self.index - 1]), self.unary_cst()]}
+        return self.primary_cst()
+
+    def primary_cst(self) -> dict[str, Any]:
         if self.match("("):
+            opening = self.tokens[self.index - 1]
             expression = self.expression_cst()
-            return {
-                "rule": "Grouping",
-                "children": [
-                    self.leaf(self.tokens[self.index - 1]),
-                    expression,
-                    self.leaf(self.expect(")")),
-                ],
-            }
+            return {"rule": "Grouping", "children": [self.leaf(opening), expression, self.leaf(self.expect(")"))]}
         if self.current.kind == "NUMBER":
-            return {"rule": "IntLiteral", "children": [self.leaf(self.advance())]}
-        if self.current.kind == "KEYWORD" and self.current.value in {"true", "false"}:
-            return {"rule": "BooleanLiteral", "children": [self.leaf(self.advance())]}
+            return {"rule": "Number", "children": [self.leaf(self.advance())]}
+        if self.current.kind == "STRING":
+            return {"rule": "String", "children": [self.leaf(self.advance())]}
+        if self.current.value in {"true", "false"}:
+            return {"rule": "Boolean", "children": [self.leaf(self.advance())]}
         if self.current.kind == "IDENTIFIER":
             return {"rule": "Identifier", "children": [self.leaf(self.advance())]}
-        self.error(f"Expected an expression, found {self.current.value!r}")
+        self.error("Expected a number, string, boolean, identifier, or parenthesized expression")
 
     @staticmethod
     def leaf(token: Token) -> dict[str, Any]:
-        return {"terminal": token.value, "kind": token.kind, "position": token.position}
+        return {
+            "terminal": token.value,
+            "kind": token.kind,
+            "position": token.position,
+            "line": token.line,
+            "column": token.column,
+        }
 
-    def ast_from_program_cst(self, cst: dict[str, Any]) -> Program:
-        return Program([self.ast_from_statement(node) for node in cst["children"]])
+    def ast_from_program(self, node: dict[str, Any]) -> Program:
+        return Program([self.ast_from_statement(child) for child in node["children"]])
 
     def ast_from_statement(self, node: dict[str, Any]) -> Any:
-        rule = node["rule"]
         children = node["children"]
-        if rule in {"VarDecl", "Assignment"}:
-            name = children[1]["terminal"]
-            expression_index = 3 if rule == "VarDecl" else 2
-            value = self.ast_from_expression(children[expression_index])
-            return VarDeclaration(name, value) if rule == "VarDecl" else Assignment(name, value)
-        if rule == "IfStmt":
-            condition = self.ast_from_expression(children[2])
-            then_branch = self.ast_from_block(children[4])
+        if node["rule"] == "VarDecl":
+            return VarDeclaration(children[0]["terminal"], children[1]["terminal"], self.ast_from_expression(children[3]))
+        if node["rule"] == "Assignment":
+            return Assignment(children[0]["terminal"], self.ast_from_expression(children[2]))
+        if node["rule"] == "IfStmt":
             else_branch = self.ast_from_block(children[6]) if len(children) == 7 else None
-            return IfStatement(condition, then_branch, else_branch)
-        if rule == "WhileStmt":
-            return WhileStatement(self.ast_from_expression(children[2]), self.ast_from_block(children[4]))
-        raise ParseError(f"Unsupported statement rule {rule!r}")
+            return IfStatement(self.ast_from_expression(children[2]), self.ast_from_block(children[4]), else_branch)
+        raise ParseError(f"Unsupported statement rule {node['rule']!r}")
 
     def ast_from_block(self, node: dict[str, Any]) -> list[Any]:
         return [self.ast_from_statement(child) for child in node["children"][1:-1]]
 
     def ast_from_expression(self, node: dict[str, Any]) -> Any:
-        rule = node["rule"]
-        children = node["children"]
-        if rule in {"Equality", "Comparison", "Term", "Factor"}:
-            result = self.ast_from_expression(children[0])
-            for index in range(1, len(children), 2):
-                result = BinaryExpression(
-                    children[index]["terminal"],
-                    result,
-                    self.ast_from_expression(children[index + 1]),
-                )
+        if node["rule"] in {"Expression", "Comparison", "Term", "Factor"}:
+            result = self.ast_from_expression(node["children"][0])
+            for index in range(1, len(node["children"]), 2):
+                result = BinaryExpression(node["children"][index]["terminal"], result, self.ast_from_expression(node["children"][index + 1]))
             return result
-        if rule == "Unary":
+        children = node["children"]
+        if node["rule"] == "Unary":
             return UnaryExpression(children[0]["terminal"], self.ast_from_expression(children[1]))
-        if rule == "Grouping":
+        if node["rule"] == "Grouping":
             return self.ast_from_expression(children[1])
-        if rule == "IntLiteral":
-            return Literal(int(children[0]["terminal"]))
-        if rule == "BooleanLiteral":
+        if node["rule"] == "Number":
+            text = children[0]["terminal"]
+            return Literal(float(text) if "." in text else int(text))
+        if node["rule"] == "String":
+            return Literal(bytes(children[0]["terminal"][1:-1], "utf-8").decode("unicode_escape"))
+        if node["rule"] == "Boolean":
             return Literal(children[0]["terminal"] == "true")
-        if rule == "Identifier":
+        if node["rule"] == "Identifier":
             return Identifier(children[0]["terminal"])
-        raise ParseError(f"Unsupported expression rule {rule!r}")
-
-
-def parse_source(source: str) -> dict[str, Any]:
-    """Parse source and return JSON-serializable ``parse_tree`` and ``ast``."""
-    ast, parse_tree = Parser(tokenize(source)).parse()
-    return {"parse_tree": parse_tree, "ast": to_dict(ast)}
+        raise ParseError(f"Unsupported expression rule {node['rule']!r}")
 
 
 def to_dict(value: Any) -> Any:
-    """Convert AST dataclasses and nested lists into ordinary Python values."""
+    """Convert AST dataclasses and nested values into ordinary dictionaries."""
     if is_dataclass(value):
-        return {
-            "type": type(value).__name__,
-            **{field.name: to_dict(getattr(value, field.name)) for field in fields(value)},
-        }
+        return {"type": type(value).__name__, **{field.name: to_dict(getattr(value, field.name)) for field in fields(value)}}
     if isinstance(value, list):
         return [to_dict(item) for item in value]
     return value
 
 
-def main() -> None:
-    import argparse
+def parse_source(source: str) -> dict[str, Any]:
+    """Validate source and return its concrete parse tree and abstract syntax tree."""
+    ast, parse_tree = Parser(tokenize(source)).parse()
+    return {"parse_tree": parse_tree, "ast": to_dict(ast)}
 
-    parser = argparse.ArgumentParser(description="Parse the EBNF mini-language and print its CST and AST.")
-    parser.add_argument("source", nargs="?", help="source text; omit to read from standard input")
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Validate the mini-language and print its CST and AST.")
+    parser.add_argument("source", nargs="?", help="one-line source; omit to read a complete program from stdin")
+    parser.add_argument("--ebnf", action="store_true", help="print the predefined grammar and exit")
     args = parser.parse_args()
-    source = args.source if args.source is not None else input()
+    if args.ebnf:
+        print(EBNF_GRAMMAR, end="")
+        return
+    source = args.source if args.source is not None else sys.stdin.read()
+    if not source.strip():
+        parser.error("No source was provided")
     try:
         print(json.dumps(parse_source(source), indent=2))
     except ParseError as error:

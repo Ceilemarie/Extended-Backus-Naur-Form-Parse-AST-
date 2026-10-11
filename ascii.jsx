@@ -45,6 +45,7 @@ export default function SandHero({ imageSrc = "/liminal-stack.png" }) {
           this.vy -= Math.sin(angle) * force * 6;
         }
 
+        //gravity & friction
         if (this.isFalling) {
           this.vy += 0.22; // Sand gravity
           this.vx *= 0.94; // Air resistance
@@ -66,7 +67,7 @@ export default function SandHero({ imageSrc = "/liminal-stack.png" }) {
         }
       }
 
-      draw(context) {
+      draw(context) { 
         context.fillStyle = this.color;
         context.fillRect(Math.round(this.x), Math.round(this.y), 2, 2);
       }
@@ -81,7 +82,7 @@ export default function SandHero({ imageSrc = "/liminal-stack.png" }) {
     }
 
     img.onload = () => {
-      // Dimensions ng canvas canvas viewport
+      // Dimensions of canvas viewport
       const targetW = 380;
       const targetH = 320;
       canvas.width = targetW;
@@ -191,7 +192,6 @@ export default function SandHero({ imageSrc = "/liminal-stack.png" }) {
       </div>
 
       <div className="mt-3 flex items-center justify-between w-full px-2 text-[12px] font-mono text-zinc-500">
-        <span>Click or Drag over image to scatter</span>
         <button
           onClick={handleReset}
           className="px-2.5 py-1 text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 rounded transition-colors text-xs"

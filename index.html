@@ -79,43 +79,46 @@
               <span class="bot-label">SYNTAX ENGINE</span>
             </div>
             <div class="preset-group">
-              <span class="preset-label">Python examples:</span>
-              <button class="preset-btn" data-code="total = 10 + 5&#10;print(total)">Basics</button>
-              <button class="preset-btn" data-code="if score >= 75:&#10;    passed = True&#10;else:&#10;    passed = False">If</button>
-              <button class="preset-btn" data-code="for number in range(3):&#10;    print(number)">Loop</button>
+              <span class="preset-label">EBNF examples:</span>
+              <button class="preset-btn" data-code="int total = 10 + 5;">Declaration</button>
+              <button class="preset-btn" data-code="if (total >= 15) { total = total + 1; }">If statement</button>
+              <button class="preset-btn" data-code="int x = 3; if (x == 3) { x = x + 1; }">Block</button>
             </div>
           </div>
 
           <div class="bot-message-box">
             <p class="bot-prompt">
-              &gt; <strong>PYTHON:</strong> Enter Python source or upload a <code>.py</code> file.
+              &gt; <strong>EBNF:</strong> Enter code that follows the grammar.
             </p>
           </div>
 
           <div class="input-row">
             <textarea
               id="codeInput" 
-              placeholder="e.g. total = 10 + 5&#10;print(total)"
+              placeholder="e.g. int total = 10 + 5;"
               autocomplete="off" 
               spellcheck="false" 
               rows="4"
-            >total = 10 + 5
-print(total)</textarea>
-            <label class="upload-btn" for="sourceFile">Upload .py</label>
-            <input id="sourceFile" type="file" accept=".py,text/x-python" />
+            >int total = 10 + 5;</textarea>
+            <label class="upload-btn" for="sourceFile">Upload source</label>
+            <input id="sourceFile" type="file" accept=".txt,.c,.cpp,.h" />
             <button id="runBtn" class="run-btn" aria-label="Analyze input" title="Analyze input">&rarr;</button>
           </div>
         </div>
 
-        <!-- Roadmap Containers: Parse Tree & AST (For 50% & 75%) -->
+        <!-- The two primary learning outputs: CST and AST -->
         <div class="tree-grid">
           <div class="tree-container">
             <div class="panel-header">
               <h4 id="parseTreeTitle">Concrete Parse Tree (CST)</h4>
             </div>
+            <p class="tree-explanation">
+              Shows every grammar rule, keyword, operator, and punctuation mark
+              used by the source.
+            </p>
             <div id="parseTreeOutput" class="tree-placeholder">
-              <div class="placeholder-icon">&Delta;</div>
-              <p>Run code to generate the concrete parse tree.</p>
+              <div class="placeholder-icon">CST</div>
+              <p>Run code to generate the concrete syntax tree.</p>
             </div>
           </div>
 
@@ -123,27 +126,38 @@ print(total)</textarea>
             <div class="panel-header">
               <h4 id="astTitle">Abstract Syntax Tree (AST)</h4>
             </div>
+            <p class="tree-explanation">
+              Keeps the meaning of the program and removes grammar details
+              such as semicolons and parentheses.
+            </p>
             <div id="astOutput" class="tree-placeholder">
-              <div class="placeholder-icon">&Lambda;</div>
+              <div class="placeholder-icon">AST</div>
               <p>Run code to generate the abstract syntax tree.</p>
             </div>
           </div>
         </div>
 
-        <div class="tree-container json-tree-container">
+        <div class="tree-container tree-guide">
           <div class="panel-header">
-            <h4>AST as JSON Tree</h4>
-            <div class="mermaid-controls" aria-label="Mermaid diagram controls">
-              <button id="mermaidZoomOut" type="button" title="Zoom out">−</button>
-              <button id="mermaidZoomReset" type="button" title="Reset diagram view">Reset</button>
-              <button id="mermaidZoomIn" type="button" title="Zoom in">+</button>
+            <h4>How to read the trees</h4>
+          </div>
+          <div class="tree-guide-grid">
+            <div>
+              <strong>CST = the written structure</strong>
+              <p>
+                Follow the grammar rules from <code>Program</code> down to
+                terminals such as <code>if</code>, <code>(</code>, and
+                <code>;</code>.
+              </p>
+            </div>
+            <div>
+              <strong>AST = the program meaning</strong>
+              <p>
+                Follow semantic nodes such as <code>IfStatement</code>,
+                <code>Assignment</code>, and <code>BinaryExpression</code>.
+              </p>
             </div>
           </div>
-          <div id="jsonTreeOutput" class="tree-placeholder">
-            <div class="placeholder-icon">{ }</div>
-            <p>Run Python to generate the AST JSON tree.</p>
-          </div>
-          <p id="mermaidSelection" class="mermaid-selection" aria-live="polite">Click a Mermaid node to inspect it.</p>
         </div>
 
         <!-- 25% Deliverable: Token Stream Breakdown -->

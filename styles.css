@@ -63,7 +63,7 @@ p.subtitle{
   align-items: center;
 }
 
-/* Background Canvas - Sakop ang buong screen */
+/* Background Canvas  */
 #sandCanvas {
   position: fixed;
   top: 0;
@@ -527,22 +527,16 @@ p.subtitle{
 
 /* Tree Roadmap Grid */
 .tree-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-}
-
-@media (max-width: 768px) {
-  .tree-grid {
-    grid-template-columns: 1fr;
-  }
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
 }
 
 .tree-container {
-  background: #121215;
-  border: 1px solid #27272a;
+  background: rgba(18, 18, 21, 0.92);
+  border: 2px solid #3f3f46;
   border-radius: 12px;
-  padding: 20px;
+  padding: 26px;
 }
 
 .status-pill.planned {
@@ -583,8 +577,11 @@ p.subtitle{
   align-items: flex-start;
   justify-content: flex-start;
   overflow: auto;
-  max-height: 360px;
-  text-align: left;
+  max-height: 620px;
+  min-height: 500px;
+  padding: 28px 22px;
+  background: rgba(9, 9, 11, 0.78);
+  text-align: center;
 }
 
 .tree-output pre {
@@ -593,6 +590,230 @@ p.subtitle{
   color: #a7f3d0;
   font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
   white-space: pre-wrap;
+}
+
+.tree-output .mermaid {
+  width: max-content;
+  min-width: 100%;
+  padding: 18px 36px 36px;
+  text-align: center;
+}
+
+.tree-output .mermaid svg {
+  display: block;
+  min-width: 920px;
+  max-width: none;
+  height: auto;
+  margin: 0 auto;
+}
+
+.tree-output .nodeLabel {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.tree-output.mermaid-cst .mermaid {
+  padding-top: 30px;
+  padding-bottom: 48px;
+}
+
+.tree-output.mermaid-cst .mermaid svg {
+  min-width: 1400px;
+  transform: scale(1.55);
+  transform-origin: top center;
+  margin-bottom: 210px;
+}
+
+.tree-output.mermaid-cst .nodeLabel {
+  font-size: 20px;
+}
+
+.tree-output .edgePath path {
+  stroke: #a1a1aa;
+  stroke-width: 3px;
+}
+
+.tree-explanation {
+  margin: -8px 0 14px;
+  color: #a1a1aa;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.syntax-tree,
+.syntax-tree-children {
+  margin: 0;
+  padding: 0;
+}
+
+.syntax-tree {
+  display: inline-block;
+  min-width: 100%;
+  padding: 8px 24px 24px;
+  text-align: center;
+}
+
+.syntax-tree-children {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+  position: relative;
+  margin: 28px 0 0;
+  padding-top: 20px;
+}
+
+.syntax-tree-children::before {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 20px;
+  border-left: 2px solid #3f3f46;
+  content: "";
+}
+
+.syntax-tree-children > .syntax-tree::before {
+  position: absolute;
+  top: 20px;
+  left: 8%;
+  right: 8%;
+  border-top: 2px solid #3f3f46;
+  content: "";
+}
+
+.syntax-tree-node {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 90px;
+  padding: 0 4px;
+  color: #d4d4d8;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.syntax-tree-children > .syntax-tree {
+  position: relative;
+  min-width: 90px;
+  padding: 0 4px;
+}
+
+.syntax-tree-children > .syntax-tree::before {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  width: 2px;
+  height: 20px;
+  border-left: 2px solid #3f3f46;
+  content: "";
+}
+
+.syntax-tree-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 26px;
+  padding: 4px 10px;
+  border: 1px solid #0e7490;
+  border-radius: 6px;
+  background: #083344;
+  color: #67e8f9;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+}
+
+.syntax-tree-kind {
+  font-weight: 600;
+}
+
+.syntax-tree-ast .syntax-tree-label {
+  border-color: #7e22ce;
+  background: #3b0764;
+  color: #e9d5ff;
+}
+
+.syntax-tree-ast .syntax-tree-label::before {
+  color: #d8b4fe;
+}
+
+.syntax-tree-leaf {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 70px;
+  padding: 0;
+}
+
+.syntax-tree-terminal {
+  display: inline-block;
+  padding: 2px 7px;
+  border: 1px solid #854d0e;
+  border-radius: 4px;
+  background: #422006;
+  color: #facc15;
+}
+
+.syntax-tree-token {
+  color: #71717a;
+  font-size: 10px;
+}
+
+.syntax-tree-field {
+  color: #c084fc;
+}
+
+.syntax-tree-value {
+  color: #a7f3d0;
+}
+
+.syntax-tree-ast .syntax-tree-field {
+  color: #d8b4fe;
+}
+
+.syntax-tree-ast .syntax-tree-value {
+  color: #86efac;
+}
+
+.tree-guide {
+  margin-top: 20px;
+}
+
+.tree-guide-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.tree-guide-grid > div {
+  padding: 14px;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  background: #18181b;
+}
+
+.tree-guide-grid strong {
+  color: #facc15;
+  font-size: 12px;
+}
+
+.tree-guide-grid p {
+  margin: 8px 0 0;
+  color: #a1a1aa;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.tree-guide-grid code {
+  color: #67e8f9;
+}
+
+@media (max-width: 768px) {
+  .tree-guide-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .json-tree,
@@ -690,70 +911,6 @@ p.subtitle{
 .json-summary p {
   color: #71717a;
   margin-top: 8px;
-}
-
-.json-tree-container .mermaid {
-  width: 100%;
-  overflow: auto;
-  text-align: center;
-}
-
-.json-tree-container .mermaid svg {
-  max-width: none;
-  min-width: 520px;
-  height: auto;
-  cursor: grab;
-  transition: transform 0.15s ease;
-}
-
-.json-tree-container .mermaid svg:active,
-.json-tree-container.is-panning .mermaid svg {
-  cursor: grabbing;
-}
-
-.json-tree-container .node {
-  cursor: pointer;
-  outline: none;
-}
-
-.json-tree-container .node:focus .node rect,
-.json-tree-container .node:hover rect,
-.json-tree-container .node.selected rect {
-  stroke: #facc15;
-  stroke-width: 3px;
-}
-
-.mermaid-controls {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.mermaid-controls button {
-  min-width: 28px;
-  padding: 4px 8px;
-  border: 1px solid #3f3f46;
-  border-radius: 5px;
-  background: #18181b;
-  color: #a1a1aa;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.mermaid-controls button:hover {
-  border-color: #2dd4bf;
-  color: #2dd4bf;
-}
-
-.mermaid-selection {
-  min-height: 18px;
-  margin-top: 10px;
-  color: #71717a;
-  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-#jsonTreeOutput.is-panning {
-  cursor: grabbing;
 }
 
 .tree-error {
@@ -918,6 +1075,67 @@ body.theme-light .tree-output pre {
   color: #047857;
 }
 
+body.theme-light .tree-explanation {
+  color: #52525b;
+}
+
+body.theme-light .syntax-tree-children {
+  border-color: #d4d4d8;
+}
+
+body.theme-light .syntax-tree-node {
+  color: #3f3f46;
+}
+
+body.theme-light .syntax-tree-label {
+  border-color: #99f6e4;
+  background: #f0fdfa;
+  color: #0f766e;
+}
+
+body.theme-light .tree-output {
+  background: #fafafa;
+}
+
+body.theme-light .syntax-tree-children::before,
+body.theme-light .syntax-tree-children > .syntax-tree::before,
+body.theme-light .syntax-tree-children > .syntax-tree > .syntax-tree-node::before {
+  border-color: #a1a1aa;
+}
+
+body.theme-light .syntax-tree-ast .syntax-tree-label {
+  border-color: #c084fc;
+  background: #faf5ff;
+  color: #7e22ce;
+}
+
+body.theme-light .syntax-tree-terminal {
+  border-color: #facc15;
+  background: #fefce8;
+  color: #a16207;
+}
+
+body.theme-light .syntax-tree-token {
+  color: #71717a;
+}
+
+body.theme-light .syntax-tree-field {
+  color: #7e22ce;
+}
+
+body.theme-light .syntax-tree-value {
+  color: #047857;
+}
+
+body.theme-light .tree-guide-grid > div {
+  border-color: #e4e4e7;
+  background: #fafafa;
+}
+
+body.theme-light .tree-guide-grid p {
+  color: #52525b;
+}
+
 body.theme-light .json-leaf {
   background: #ffffff;
   border-color: #e4e4e7;
@@ -930,16 +1148,6 @@ body.theme-light .json-tree summary {
 
 body.theme-light .json-key {
   color: #18181b;
-}
-
-body.theme-light .mermaid-controls button {
-  background: #ffffff;
-  border-color: #d4d4d8;
-  color: #52525b;
-}
-
-body.theme-light .mermaid-selection {
-  color: #71717a;
 }
 
 body.theme-light .tree-error {

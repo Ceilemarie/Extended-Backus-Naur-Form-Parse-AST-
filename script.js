@@ -214,13 +214,6 @@ window.addEventListener("DOMContentLoaded", () => {
   const astTitle = document.getElementById("astTitle");
   const parseTreeOutput = document.getElementById("parseTreeOutput");
   const astOutput = document.getElementById("astOutput");
-  const jsonTreeOutput = document.getElementById("jsonTreeOutput");
-  const mermaidSelection = document.getElementById("mermaidSelection");
-  const mermaidZoomIn = document.getElementById("mermaidZoomIn");
-  const mermaidZoomOut = document.getElementById("mermaidZoomOut");
-  const mermaidZoomReset = document.getElementById("mermaidZoomReset");
-  let mermaidScale = 1;
-  let mermaidOffset = { x: 0, y: 0 };
 
   const KEYWORDS = new Set([
     "and", "as", "assert", "async", "await", "break", "class", "continue",
@@ -358,130 +351,8 @@ window.addEventListener("DOMContentLoaded", () => {
     return node;
   }
 
-  function renderJsonTree(code) {
-    jsonTreeOutput.classList.remove("tree-output", "tree-error");
-    jsonTreeOutput.innerHTML = "";
-    if (!code) {
-      jsonTreeOutput.innerHTML = "<p>Run Python to generate the AST JSON tree.</p>";
-      return;
-    }
-    if (!window.mermaid) {
-      jsonTreeOutput.classList.add("tree-error");
-      jsonTreeOutput.innerHTML = "<p>Mermaid could not be loaded. Check your connection and reload the page.</p>";
-      return;
-    }
-    const diagram = buildMermaidTree(code);
-    jsonTreeOutput.classList.add("tree-output");
-    window.mermaid.render(`pythonAstTree${Date.now()}`, diagram)
-      .then(({ svg }) => {
-        jsonTreeOutput.innerHTML = svg;
-        mermaidScale = 1;
-        mermaidOffset = { x: 0, y: 0 };
-        setupMermaidInteractions();
-      })
-      .catch((error) => {
-        jsonTreeOutput.classList.add("tree-error");
-        jsonTreeOutput.innerHTML = `<p>Unable to render Mermaid tree: ${escapeHtml(error.message)}</p>`;
-      });
-  }
-
-  function setupMermaidInteractions() {
-    const svg = jsonTreeOutput.querySelector("svg");
-    if (!svg) return;
-    svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", "Interactive Python AST diagram");
-    svg.style.transformOrigin = "top left";
-    applyMermaidTransform();
-    jsonTreeOutput.querySelectorAll(".node").forEach((node) => {
-      node.setAttribute("tabindex", "0");
-      node.addEventListener("click", () => selectMermaidNode(node));
-      node.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          selectMermaidNode(node);
-        }
-      });
-    });
-  }
-
-  function selectMermaidNode(node) {
-    jsonTreeOutput.querySelectorAll(".node.selected").forEach((selected) => selected.classList.remove("selected"));
-    node.classList.add("selected");
-    mermaidSelection.textContent = `Selected: ${node.querySelector("text")?.textContent || "AST node"}`;
-  }
-
-  function applyMermaidTransform() {
-    const svg = jsonTreeOutput.querySelector("svg");
-    if (svg) svg.style.transform = `translate(${mermaidOffset.x}px, ${mermaidOffset.y}px) scale(${mermaidScale})`;
-  }
-
-  mermaidZoomIn.addEventListener("click", () => {
-    mermaidScale = Math.min(3, mermaidScale + 0.15);
-    applyMermaidTransform();
-  });
-
-  mermaidZoomOut.addEventListener("click", () => {
-    mermaidScale = Math.max(0.35, mermaidScale - 0.15);
-    applyMermaidTransform();
-  });
-
-  mermaidZoomReset.addEventListener("click", () => {
-    mermaidScale = 1;
-    mermaidOffset = { x: 0, y: 0 };
-    applyMermaidTransform();
-  });
-
-  let mermaidDrag;
-  jsonTreeOutput.addEventListener("pointerdown", (event) => {
-    if (event.target.closest(".node")) return;
-    mermaidDrag = { x: event.clientX, y: event.clientY, offsetX: mermaidOffset.x, offsetY: mermaidOffset.y };
-    jsonTreeOutput.setPointerCapture(event.pointerId);
-    jsonTreeOutput.classList.add("is-panning");
-  });
-
-  jsonTreeOutput.addEventListener("pointermove", (event) => {
-    if (!mermaidDrag) return;
-    mermaidOffset.x = mermaidDrag.offsetX + event.clientX - mermaidDrag.x;
-    mermaidOffset.y = mermaidDrag.offsetY + event.clientY - mermaidDrag.y;
-    applyMermaidTransform();
-  });
-
-  jsonTreeOutput.addEventListener("pointerup", () => {
-    mermaidDrag = null;
-    jsonTreeOutput.classList.remove("is-panning");
-  });
-
-  function buildMermaidTree(value) {
-    const lines = ["flowchart TD"];
-    let nodeIndex = 0;
-    const addNode = (nodeValue, key = "root", parentId = null) => {
-      const id = `node${nodeIndex++}`;
-      const label = `${key}: ${formatTreeValue(nodeValue)}`;
-      lines.push(`${id}["${mermaidLabel(label)}"]`);
-      if (parentId) lines.push(`${parentId} --> ${id}`);
-      if (nodeValue && typeof nodeValue === "object") {
-        Object.entries(nodeValue).forEach(([childKey, childValue]) => addNode(childValue, childKey, id));
-      }
-    };
-    addNode(value);
-    return lines.join("\n");
-  }
-
-  function formatTreeValue(value) {
-    if (value === null) return "null";
-    if (typeof value === "object") return Array.isArray(value) ? "[ ]" : "{ }";
-    return String(value);
-  }
-
-  function mermaidLabel(value) {
-    return value
-      .replace(/\\/g, "\\\\")
-      .replace(/"/g, "#quot;")
-      .replace(/\n/g, " ");
-  }
-
   function parseSource(code, tokens) {
-    const parserTokens = tokens.map((token) => ({
+    const parserTokens = tokens.filter((token) => !["Newline", "Indent", "Dedent", "Comment"].includes(token.type)).map((token) => ({
       value: token.lexeme,
       kind: token.type,
     }));
@@ -520,8 +391,8 @@ window.addEventListener("DOMContentLoaded", () => {
         const expression = expressionCst();
         return { rule: "Grouping", children: [leaf(opening), expression, leaf(expect(")"))] };
       }
-      if (current().kind === "IntLiteral") {
-        return { rule: "IntLiteral", children: [leaf(parserTokens[index++])] };
+      if (current().kind === "NumberLiteral") {
+        return { rule: "number", children: [leaf(parserTokens[index++])] };
       }
       if (current().value === "true" || current().value === "false") {
         return { rule: "BooleanLiteral", children: [leaf(parserTokens[index++])] };
@@ -531,26 +402,29 @@ window.addEventListener("DOMContentLoaded", () => {
       }
       error("Expected an expression");
     };
-    const term = () => binary(factor, ["*", "/"], "Factor");
-    const additive = () => binary(term, ["+", "-"], "Term");
-    const comparison = () => binary(additive, ["<", "<=", ">", ">="], "Comparison");
-    const expressionCst = () => binary(comparison, ["==", "!="], "Equality");
+    const term = () => binary(factor, ["*", "/"], "term");
+    const additive = () => binary(term, ["+", "-"], "additive");
+    const comparison = () => binary(additive, ["<", "<=", ">", ">="], "relational");
+    const expressionCst = () => binary(comparison, ["==", "!="], "equality");
     const block = () => {
       const children = [leaf(expect("{"))];
       while (current().value !== "}" && current().kind !== "EOF") children.push(statement());
       children.push(leaf(expect("}")));
       return { rule: "Block", children };
     };
-    const declaration = () => ({
-      rule: "VarDecl",
-      children: [
-        leaf(parserTokens[index++]),
-        leaf(expectKind("Identifier")),
-        leaf(expect("=")),
-        expressionCst(),
-        leaf(expect(";")),
-      ],
-    });
+    const declaration = () => {
+      if (!["int", "float", "void", "bool"].includes(current().value)) {
+        error("Expected a type (int, float, void, or bool)");
+      }
+      const type = leaf(expectKind("Identifier"));
+      const name = leaf(expectKind("Identifier"));
+      const children = [type, name];
+      if (match("=")) {
+        children.push(leaf(parserTokens[index - 1]), expressionCst());
+      }
+      children.push(leaf(expect(";")));
+      return { rule: "declaration", children: [{ rule: "var_decl", children }] };
+    };
     const assignment = () => ({
       rule: "Assignment",
       children: [
@@ -561,7 +435,7 @@ window.addEventListener("DOMContentLoaded", () => {
       ],
     });
     const statement = () => {
-      if (["let", "const", "var"].includes(current().value)) return declaration();
+      if (["int", "float", "void", "bool"].includes(current().value)) return declaration();
       if (current().value === "if") {
         const children = [leaf(parserTokens[index++]), leaf(expect("(")), expressionCst(), leaf(expect(")")), block()];
         if (match("else")) children.push(leaf(parserTokens[index - 1]), block());
@@ -579,7 +453,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const cst = { rule: "Program", children: [] };
     while (current().kind !== "EOF") cst.children.push(statement());
     const astExpression = (node) => {
-      if (["Equality", "Comparison", "Term", "Factor"].includes(node.rule)) {
+      if (["equality", "relational", "additive", "term", "Factor"].includes(node.rule)) {
         let result = astExpression(node.children[0]);
         for (let i = 1; i < node.children.length; i += 2) {
           result = { type: "BinaryExpression", operator: node.children[i].terminal, left: result, right: astExpression(node.children[i + 1]) };
@@ -588,15 +462,25 @@ window.addEventListener("DOMContentLoaded", () => {
       }
       if (node.rule === "Unary") return { type: "UnaryExpression", operator: node.children[0].terminal, operand: astExpression(node.children[1]) };
       if (node.rule === "Grouping") return astExpression(node.children[1]);
-      if (node.rule === "IntLiteral") return { type: "Literal", value: Number(node.children[0].terminal) };
+      if (node.rule === "number") return { type: "Literal", value: Number(node.children[0].terminal) };
       if (node.rule === "BooleanLiteral") return { type: "Literal", value: node.children[0].terminal === "true" };
       return { type: "Identifier", name: node.children[0].terminal };
     };
     const astStatement = (node) => {
       const children = node.children;
-      if (node.rule === "VarDecl" || node.rule === "Assignment") {
-        const expression = node.rule === "VarDecl" ? children[3] : children[2];
-        return { type: node.rule === "VarDecl" ? "VarDeclaration" : "Assignment", name: children[1].terminal, [node.rule === "VarDecl" ? "initializer" : "value"]: astExpression(expression) };
+      if (node.rule === "declaration") {
+        const declarationNode = children[0];
+        const declarationChildren = declarationNode.children;
+        const expression = declarationChildren.length === 5 ? declarationChildren[3] : null;
+        return {
+          type: "VariableDeclaration",
+          dataType: declarationChildren[0].terminal,
+          name: declarationChildren[1].terminal,
+          initializer: expression ? astExpression(expression) : null,
+        };
+      }
+      if (node.rule === "Assignment") {
+        return { type: "Assignment", name: children[0].terminal, value: astExpression(children[2]) };
       }
       if (node.rule === "WhileStmt") return { type: "WhileStatement", condition: astExpression(children[2]), body: children[4].children.slice(1, -1).map(astStatement) };
       return { type: "IfStatement", condition: astExpression(children[2]), thenBranch: children[4].children.slice(1, -1).map(astStatement), elseBranch: children[6] ? children[6].children.slice(1, -1).map(astStatement) : null };
@@ -655,27 +539,94 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!code.trim()) {
       parseTreeOutput.innerHTML = "<p>Enter code to generate the concrete parse tree.</p>";
       astOutput.innerHTML = "<p>Enter code to generate the abstract syntax tree.</p>";
-      jsonTreeOutput.classList.remove("tree-output", "tree-error");
-      jsonTreeOutput.innerHTML = "<p>Run Python to generate the AST JSON tree.</p>";
       return;
     }
     try {
-      const result = parsePythonSource(code, tokens);
+      const result = parseSource(code, tokens);
       parseTreeOutput.classList.add("tree-output");
       astOutput.classList.add("tree-output");
-      parseTreeOutput.innerHTML = `<pre>${escapeHtml(JSON.stringify(result.parseTree, null, 2))}</pre>`;
-      astOutput.innerHTML = `<pre>${escapeHtml(JSON.stringify(result.ast, null, 2))}</pre>`;
-      renderJsonTree(result.ast);
+      renderMermaidTree(parseTreeOutput, result.parseTree, "cst");
+      renderMermaidTree(astOutput, result.ast, "ast");
     } catch (error) {
       const message = `<p>Parse error: ${escapeHtml(error.message)}</p>`;
       parseTreeOutput.classList.add("tree-error");
       astOutput.classList.add("tree-error");
       parseTreeOutput.innerHTML = message;
       astOutput.innerHTML = message;
-      jsonTreeOutput.classList.remove("tree-output");
-      jsonTreeOutput.classList.add("tree-error");
-      jsonTreeOutput.innerHTML = "<p>AST JSON tree unavailable until the Python input parses successfully.</p>";
     }
+  }
+
+  function renderMermaidTree(container, value, mode) {
+    container.classList.remove("mermaid-cst", "mermaid-ast");
+    container.classList.add(`mermaid-${mode}`);
+    if (!window.mermaid) {
+      container.classList.add("tree-error");
+      container.innerHTML = "<p>Tree renderer unavailable. Check your connection and reload the page.</p>";
+      return;
+    }
+
+    const diagram = buildMermaidTree(value, mode);
+    container.innerHTML = `<div class="mermaid">${diagram}</div>`;
+    const diagramId = `${mode}Tree${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    window.mermaid.render(diagramId, diagram)
+      .then(({ svg, bindFunctions }) => {
+        container.innerHTML = svg;
+        container.querySelector("svg")?.setAttribute("aria-label", `${mode === "cst" ? "Concrete parse" : "Abstract syntax"} tree`);
+        if (bindFunctions) bindFunctions(container);
+      })
+      .catch((error) => {
+        container.classList.add("tree-error");
+        container.innerHTML = `<p>Unable to draw tree: ${escapeHtml(error.message)}</p>`;
+      });
+  }
+
+  function buildMermaidTree(value, mode) {
+    const lines = [
+      "flowchart TD",
+      "classDef root fill:transparent,stroke:#5eead4,color:#ecfeff,stroke-width:3px",
+      "classDef node fill:transparent,stroke:#22d3ee,color:#ecfeff,stroke-width:2px",
+      "classDef ast fill:transparent,stroke:#d8b4fe,color:#faf5ff,stroke-width:2px",
+      "classDef terminal fill:transparent,stroke:#facc15,color:#fef9c3,stroke-width:2px",
+      "classDef field fill:transparent,stroke:#a1a1aa,color:#f4f4f5,stroke-width:2px",
+    ];
+    let index = 0;
+    const addNode = (nodeValue, label, parentId = null, isRoot = false) => {
+      const id = `treeNode${index++}`;
+      if (nodeValue && typeof nodeValue === "object" && nodeValue.terminal !== undefined) {
+        label = `"${nodeValue.terminal}"\n${nodeValue.kind}`;
+      } else if (nodeValue === null || typeof nodeValue !== "object") {
+        label = `${label}: ${nodeValue}`;
+      }
+      const nodeClass = isRoot ? "root" : mode === "ast" ? "ast" : nodeValue && nodeValue.terminal !== undefined ? "terminal" : "node";
+      lines.push(`${id}["${mermaidLabel(label)}"]:::${nodeClass}`);
+      if (parentId) lines.push(`${parentId} --> ${id}`);
+
+      if (nodeValue && typeof nodeValue === "object") {
+        if (mode === "cst" && nodeValue.terminal !== undefined) return id;
+        Object.entries(nodeValue).forEach(([key, child]) => {
+          if (mode === "cst" && key === "rule") return;
+          if (mode === "ast" && key === "type") return;
+          if (Array.isArray(child)) {
+            child.forEach((entry, childIndex) => addNode(entry, `${key}[${childIndex}]`, id));
+          } else {
+            addNode(child, key, id);
+          }
+        });
+      }
+      return id;
+    };
+
+    const rootLabel = mode === "cst" ? value.rule || "Program" : value.type || "Program";
+    addNode(value, rootLabel, null, true);
+    return lines.join("\n");
+  }
+
+  function mermaidLabel(value) {
+    return String(value)
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, "#quot;")
+      .replace(/[<>]/g, "")
+      .replace(/\n/g, "<br/>");
   }
 
   function escapeHtml(value) {
@@ -702,12 +653,12 @@ window.addEventListener("DOMContentLoaded", () => {
   sourceFile.addEventListener("change", () => {
     const file = sourceFile.files[0];
     if (!file) return;
-    const isPythonFile = file.name.toLowerCase().endsWith(".py");
-    if (!isPythonFile) {
+    const supportedFile = /\.(txt|c|cpp|h)$/i.test(file.name);
+    if (!supportedFile) {
       sourceFile.value = "";
       renderTrees("", []);
-      parseTreeOutput.innerHTML = "<p>Only Python .py files are supported.</p>";
-      astOutput.innerHTML = "<p>Choose a .py file and try again.</p>";
+      parseTreeOutput.innerHTML = "<p>Only source files (.txt, .c, .cpp, .h) are supported.</p>";
+      astOutput.innerHTML = "<p>Choose a supported source file and try again.</p>";
       return;
     }
     const reader = new FileReader();

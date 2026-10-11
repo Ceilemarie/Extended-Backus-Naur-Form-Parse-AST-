@@ -2,7 +2,7 @@
 
 This project is an interactive educational web app that demonstrates the basics of EBNF (Extended Backus–Naur Form), lexical analysis, and the difference between a concrete parse tree and an abstract syntax tree (AST). It is designed as a visual learning tool for beginners exploring formal grammar and parser concepts.
 
-The app presents a dark cyberpunk-style landing page, a sand-particle background animation, and a second workspace panel where users can enter Python source or upload a `.py` file and inspect its tokens, concrete parse tree, and AST.
+The app presents a dark cyberpunk-style landing page, a sand-particle background animation, and a second workspace panel where users can enter source code or upload a file and inspect its tokens, concrete parse tree, and AST.
 
 ---
 
@@ -12,7 +12,7 @@ The repository combines:
 
 - a styled landing page and theme toggle
 - a particle-based animated background
-- a Python lexer/tokenizer
+- a lexer/tokenizer for the teaching language
 - a grammar table showing token classes and matching EBNF terminals
 - an in-browser recursive-descent parser
 - concrete parse tree and AST visualization
@@ -24,8 +24,9 @@ In short, it teaches how source code is broken down into meaningful pieces befor
 
 ## Core concept
 
-The app accepts Python source exclusively. Its browser parser generates a
-concrete parse tree and an abstract syntax tree from typed or uploaded source.
+The browser parser accepts the small teaching language defined below and
+generates a concrete parse tree and an abstract syntax tree from typed or
+uploaded source.
 
 The flow is:
 
@@ -68,16 +69,16 @@ This effect is implemented in both:
 After clicking Start, the app transitions to a learning workspace with:
 
 - theory cards explaining EBNF, concrete parse trees, and ASTs
-- a multiline Python console input area
-- preset buttons for Python examples
-- a `.py` file upload control
+- a multiline source-code console input area
+- preset buttons for statement and conditional examples
+- a source-file upload control
 - automatic AST-to-JSON tree visualization
 - a token table that updates live
 
 ### 4. Tokenizer / lexer
-The app contains a Python-oriented tokenizer that recognizes:
+The app contains a tokenizer that recognizes:
 
-- Python keywords such as `def`, `if`, `for`, `while`, `return`, `True`, and `None`
+- declaration and conditional keywords such as `let`, `const`, `var`, `if`, and `else`
 - identifiers
 - number and string literals
 - Python operators and delimiters
@@ -99,32 +100,37 @@ The UI is built to teach grammar concepts rather than just process code. It incl
 
 ---
 
-## Python syntax modeled by the app
+## Teaching-language syntax modeled by the app
 
-The browser workspace is designed around common Python statements like:
+The browser workspace is designed around:
 
+- variable declarations
 - assignments
-- conditionals
-- loops and function calls
+- arithmetic expressions
+- conditional blocks
 
 Example inputs include:
 
-- `total = 10 + 5`
-- `if score >= 75:`
-- `    passed = True`
-- `for number in range(3):`
-- `    print(number)`
+- `let total = 10 + 5;`
+- `total = total * 2;`
+- `if (total >= 20) { total = total - 1; }`
+- `if (total >= 20) { total = 1; } else { total = 0; }`
 
-The underlying grammar is conceptually similar to this:
+The predefined EBNF grammar is:
 
 ```
-Module         = { Statement } ;
-Statement      = Assignment | FunctionDef | IfStmt | ForStmt | WhileStmt | ReturnStmt | ExprStmt ;
-Assignment     = Identifier, ("=" | "+=" | "-="), Expr, NEWLINE ;
-FunctionDef    = "def", Identifier, "(", [ Parameters ], ")", ":", Suite ;
-IfStmt         = "if", Expr, ":", Suite, { "elif", Expr, ":", Suite }, [ "else", ":", Suite ] ;
-Suite          = NEWLINE, INDENT, { Statement }, DEDENT ;
-Expr           = Python expression ;
+Program       = { Statement } ;
+Statement     = VarDecl | Assignment | IfStmt ;
+VarDecl       = ("let" | "const" | "var") Identifier "=" Expression ";" ;
+Assignment    = Identifier "=" Expression ";" ;
+IfStmt        = "if" "(" Expression ")" Block [ "else" Block ] ;
+Block         = "{" { Statement } "}" ;
+Expression    = Comparison { ("==" | "!=") Comparison } ;
+Comparison    = Term { ("<" | "<=" | ">" | ">=") Term } ;
+Term          = Factor { ("+" | "-") Factor } ;
+Factor        = Unary { ("*" | "/" | "%") Unary } ;
+Unary         = ("+" | "-") Unary | Primary ;
+Primary       = Number | String | Boolean | Identifier | "(" Expression ")" ;
 ```
 
 This helps students connect the formal grammar to the tokens they see in the table.
@@ -187,21 +193,22 @@ This is a dependency-free Python implementation of the documented grammar. It
 provides `tokenize`, recursive-descent parsing, a concrete parse tree, and an
 AST. The file is self-contained and can be uploaded as a single Python file.
 
-Run it with source text:
+Run it with one statement:
 
 ```bash
-python3 ebnf_parser_ast.py 'total = 10 + 5'
+python ebnf_parser_ast.py 'let total = 10 + 5;'
 ```
 
-Or pipe source through standard input:
+Or pipe a complete block of statements through standard input:
 
 ```bash
-printf 'for number in range(3):\n    print(number)\n' | python3 ebnf_parser_ast.py
+printf 'let total = 10 + 5;\nif (total >= 15) { total = total + 1; }\n' | python ebnf_parser_ast.py
 ```
 
-The JSON output contains `parse_tree` (including terminals and punctuation)
-and `ast` (the simplified semantic structure). Invalid syntax raises a
-`ParseError` and the command-line interface reports the source position.
+Use `--ebnf` to print the predefined grammar. The normal JSON output contains
+`parse_tree` (including terminals, punctuation, and source locations) and
+`ast` (the simplified semantic structure). Invalid syntax raises a `ParseError`
+and the command-line interface reports the line and column.
 
 #### Python API
 
@@ -210,30 +217,30 @@ The uploadable Python file exposes these functions and types:
 ```python
 from ebnf_parser_ast import ParseError, parse_source, tokenize
 
-tokens = tokenize("total = 10 + 5")
-result = parse_source("total = 10 + 5")
+tokens = tokenize("let total = 10 + 5;")
+result = parse_source("let total = 10 + 5;")
 
 print(result["parse_tree"])  # Concrete syntax tree
 print(result["ast"])         # JSON-serializable AST
 ```
 
-- `tokenize(source)` returns a list of `Token` objects.
+- `tokenize(source)` returns a list of `Token` objects with line and column information.
 - `parse_source(source)` returns a dictionary with `parse_tree` and `ast`.
 - `ParseError` identifies invalid syntax and includes the source position.
 - `Parser(tokens).parse()` returns the typed `Program` AST and concrete tree
   for callers that need the dataclass representation.
 
 The browser implementation exposes the equivalent behavior through the Run
-button, Python presets, and `.py` upload control. Its internal functions are
+button, presets, and file upload control. Its internal functions are
 `tokenize`, `parsePythonSource`, `renderTokens`, and `renderTrees`; they are
 intentionally scoped to the page rather than exported as a module.
 
 ### AST JSON tree
 
-The workspace accepts Python source exclusively. After valid Python is analyzed,
+After valid teaching-language source is analyzed,
 the AST is automatically rendered in a separate visual JSON tree container with
 connected Mermaid nodes and branches. The diagram is generated from the AST
-after each successful analysis. Invalid Python shows
+after each successful analysis. Invalid source shows
 the parse error in the original CST/AST panels and does not generate a JSON
 tree.
 
@@ -241,26 +248,26 @@ tree.
 
 ## How the tokenizer works
 
-The tokenizer in script.js scans Python input left to right and classifies
+The tokenizer in script.js scans input left to right and classifies
 characters into structured token types.
 
 Examples:
 
 - indentation produces `INDENT` and `DEDENT` tokens
-- Python delimiters and operators are tokenized individually
+- delimiters and operators are tokenized individually
 - numeric sequences become `NumberLiteral` tokens
 - quoted text becomes `StringLiteral` tokens
-- alphabetic sequences become either Python keywords or identifiers
+- alphabetic sequences become either keywords or identifiers
 - comments and line endings are preserved as tokens
 - unrecognized characters are marked as `Unknown`
 
 Each token includes a human-readable EBNF label, and valid input is parsed into
 the concrete parse tree and AST panels.
 
-The browser parser accepts common Python assignments, function definitions,
-conditionals, loops, returns, calls, literals, operators, indentation, and
-comments. Unknown characters are reported as parse errors. It is a structural
-learning parser, not a replacement for Python's complete `ast` module.
+The browser parser accepts declarations, assignments, conditionals, literals,
+operators, blocks, and comments. Unknown characters and malformed statements
+are reported as parse errors. It is a structural learning parser, not a
+general-purpose programming language implementation.
 
 ---
 
