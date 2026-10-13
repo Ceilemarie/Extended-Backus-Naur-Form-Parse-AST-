@@ -106,9 +106,9 @@ export default function SandHero({ imageSrc = "/liminal-stack.png" }) {
           const r = imgData[idx];
           const alpha = imgData[idx + 3];
 
-          // Target ang dark/black dithered pixels ng image
+          // Target the dark/black dithered pixels in the image
           if (alpha > 120 && r < 120) {
-            // Gumamit ng luminescent cyberpunk terminal tone
+            // Use a luminescent cyberpunk terminal tone
             const color = "#5eead4"; // Tailwind teal-300 / mint glow
             particles.push(new Particle(x, y, color));
           }

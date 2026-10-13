@@ -5,7 +5,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const ctx = canvas.getContext("2d");
   const img = new Image();
   img.crossOrigin = "anonymous";
-  img.src = "liminal-stack.png"; // image used
+  img.src = "liminal-stack.png"; // Image used for the particle effect
 
   let particles = [];
   const mouse = { x: -1000, y: -1000, isDown: false, radius: 55 };
@@ -95,7 +95,7 @@ window.addEventListener("DOMContentLoaded", () => {
     offCtx.drawImage(img, 0, 0, targetW, targetH);
 
     const imgData = offCtx.getImageData(0, 0, targetW, targetH).data;
-    const step = 2; // Density ng dots
+    const step = 2; // Dot density
 
     for (let y = 0; y < targetH; y += step) {
       for (let x = 0; x < targetW; x += step) {
@@ -133,7 +133,7 @@ window.addEventListener("DOMContentLoaded", () => {
     requestAnimationFrame(animate);
   }
 
-  // Mouse Interaction kahit nasa window level
+  // Mouse interaction even at the window level
   window.addEventListener("mousemove", (e) => {
     mouse.x = e.clientX;
     mouse.y = e.clientY;
